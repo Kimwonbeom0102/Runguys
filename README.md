@@ -34,7 +34,7 @@
 ## 📽 시연 영상 및 이미지
 [![프로젝트 영상](https://img.youtube.com/vi/EG7tzD8qE_M/0.jpg)](https://www.youtube.com/watch?v=EG7tzD8qE_M)  
 [YouTube 영상 보기](https://www.youtube.com/watch?v=EG7tzD8qE_M)
-[![런가이즈 이미지 보기](https://i.imgur.com/KiYXxZI.png)](https://imgur.com/a/WtYWRKE)
+
 ## 👤 나의 역할
 
 - 팀장 및 PM 역할 수행: 전체 기획 수립, 일정 조율, 테스트 및 피드백 주도
