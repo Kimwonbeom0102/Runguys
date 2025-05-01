@@ -1,0 +1,297 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Class Name="Practices.PhotonPunClient.Network.ClientCharacterController" Collapsed="true" BaseTypeListCollapsed="true">
+    <Position X="30" Y="3.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AJGBAAAAEAMAAEAAAAAAEBCACgAACAAMRAAAAAECCEA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\ClientCharacterController.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" Collapsed="true" />
+  </Class>
+  <Class Name="Practices.PhotonPunClient.Network.PhotonEventCode">
+    <Position X="28.75" Y="7.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\PhotonEventCode.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.Network.PhotonManager">
+    <Position X="28.5" Y="3.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAkAAAAAAAABAAAAAAAAAAAAAQEA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\PhotonManager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.Network.PunAutoSyncMonobehaviour" BaseTypeListCollapsed="true">
+    <Position X="26.5" Y="3.25" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AACAAAAAABAAAAAAIEAAAAAAAAAAAAAIAAAAAAAACEA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\PunAutoSyncMonoBehaviour.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" Collapsed="true" />
+  </Class>
+  <Class Name="Supercyan.FreeSample.PhotonCharacterControl">
+    <Position X="24.5" Y="0.5" Width="1.75" />
+    <NestedTypes>
+      <Enum Name="Supercyan.FreeSample.PhotonCharacterControl.ControlMode" Collapsed="true">
+        <TypeIdentifier>
+          <NewMemberFileName>Assets\ParkourMultiGame\Scripts\Network\PhotonCharacterControl.cs</NewMemberFileName>
+        </TypeIdentifier>
+      </Enum>
+    </NestedTypes>
+    <TypeIdentifier>
+      <HashCode>RQcABQ4gAgAAAACCBFAAAAIIgAAkAAIMEACCoAACgEE=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\PhotonCharacterControl.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.PlayerInRoomPropertyKey">
+    <Position X="28.75" Y="9" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\PhotonCustomPropertyTypes.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.PlayerInGamePlayPropertyKey">
+    <Position X="28.5" Y="6" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Network\PhotonCustomPropertyTypes.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.GamePlayWorkflow">
+    <Position X="26.5" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAACAAEAgAAAAAAAAAAAAAAAQAAAAAABAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Workflows\GamePlayWorkflow.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="GameTimerUI">
+    <Position X="22.75" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAQAAAAAICAAEAAAAAAAAAAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\GameTimerUI.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="LobbyGameManager">
+    <Position X="26.5" Y="8.25" Width="2" />
+    <TypeIdentifier>
+      <HashCode>ACAIAAAAACAAAAAAAAAAAAAAAAAAAAIJAAAGAAAAABA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\LobbyGameManager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="FinishLineTrigger">
+    <Position X="22.75" Y="6.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>IAAAAAAAAAAAACAAAAAAAAAAABAAAAAAQAIAEAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Workflows\FinishLineTrigger.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="GamePlayManager">
+    <Position X="24.5" Y="9" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AgAAAQAAACAAAAAAAEAAQAAAAAAAAAAEAAAEAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Workflows\GamePlayManager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.RoomListSlot">
+    <Position X="17" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>EAQIAAAQAAAAAgAAgCAAAgCAAABAAABAAAAARABCAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\RoomListSlot.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.RoomPlayerInfoSlot">
+    <Position X="15" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAEIAAkAAAAIAAAAEAAABQAAAIAAAAAAAAAAAAABA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\RoomPlayerInfoSlot.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.UI_CharacterSelect">
+    <Position X="11.5" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AACAAAAAACAEAAgAAAAAAAgAAAABAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_CharacterSelect.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.UI_CreateRoomOption">
+    <Position X="6" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAACAAAAACEAAAAAAAAAAgAAAAAEAAACAEAAAABAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_CreateRoomOption.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.UI_ExitGame">
+    <Position X="22.75" Y="9" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAACAAAAAAIAAAAAAAAAAAAAAEAAAAAAAAAgA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_ExitGame.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.UI_Lobby">
+    <Position X="4" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>gASAAEAAACCAAAAAAAAKAIETgAEEIBAMGAAAAAQASIA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_Lobby.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="Practices.PhotonPunClient.UI.UI_Room">
+    <Position X="0.5" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AACBAAAAAGQAAAAEAIQBCAAAAAAEAAGJGACEAAhECEQ=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_Room.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="Practices.UGUI_Management.Singletons.Singleton&lt;T&gt;">
+    <Position X="18.75" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAgAAAAAAAABAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Singletons\Singleton`1.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_Base">
+    <Position X="9.25" Y="0.5" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAFAAAAADEAAIAAEAAEAIAEAAAEAAgBAESAAAAAAEA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_Base.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_ConfirmWindow">
+    <Position X="13.25" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAEAAACEAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_ConfirmWindow.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_Manager">
+    <Position X="18.75" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAQAAACAAAAAAAAAAAAAAQCBCAEAAIAAAAQAGAg=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_Manager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_Popup">
+    <Position X="9.5" Y="6.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAACQAAAAAAABAAAAAAAAQAAgAAAAAAAAAAgA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_Popup.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_Screen">
+    <Position X="2.25" Y="6.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\UI_Screen.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.GameClient.Workflows.LobbySceneWorkflow">
+    <Position X="26.75" Y="6" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAACAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Workflows\LobbySceneWorkflow.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UnityEngine.InputSystem.@PlayerInputActions" BaseTypeListCollapsed="true">
+    <Position X="20.75" Y="0.5" Width="1.5" />
+    <NestedTypes>
+      <Struct Name="UnityEngine.InputSystem.@PlayerInputActions.PlayerActions" Collapsed="true">
+        <TypeIdentifier>
+          <NewMemberFileName>Assets\ParkourMultiGame\Scripts\PlayerInputs\PlayerInputActions.cs</NewMemberFileName>
+        </TypeIdentifier>
+      </Struct>
+      <Struct Name="UnityEngine.InputSystem.@PlayerInputActions.UIActions" Collapsed="true">
+        <TypeIdentifier>
+          <NewMemberFileName>Assets\ParkourMultiGame\Scripts\PlayerInputs\PlayerInputActions.cs</NewMemberFileName>
+        </TypeIdentifier>
+      </Struct>
+      <Interface Name="UnityEngine.InputSystem.@PlayerInputActions.IPlayerActions" Collapsed="true">
+        <TypeIdentifier>
+          <NewMemberFileName>Assets\ParkourMultiGame\Scripts\PlayerInputs\PlayerInputActions.cs</NewMemberFileName>
+        </TypeIdentifier>
+      </Interface>
+      <Interface Name="UnityEngine.InputSystem.@PlayerInputActions.IUIActions" Collapsed="true">
+        <TypeIdentifier>
+          <NewMemberFileName>Assets\ParkourMultiGame\Scripts\PlayerInputs\PlayerInputActions.cs</NewMemberFileName>
+        </TypeIdentifier>
+      </Interface>
+    </NestedTypes>
+    <TypeIdentifier>
+      <HashCode>AIAGAAAAACAAABAigAKECxAJYAIXBGAWAGEgIFhQAMA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\PlayerInputs\PlayerInputActions.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" Collapsed="true" />
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.DraggablePanel" Collapsed="true">
+    <Position X="30" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UGUI\DraggablePanel.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_Equipments">
+    <Position X="7.75" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UGUI\UI_Equipments.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_Inventory">
+    <Position X="9.5" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAACAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UGUI\UI_Inventory.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.UI.UI_UGUIManagementExampleScreen">
+    <Position X="2.25" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UGUI\UI_UGUIManagementExampleScreen.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="SettingsManager">
+    <Position X="22.75" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAACAAEAAAIAAAAAAAAAAAAAgAQAAAAAEABAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\UI\SettingsManager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.Utilities.ComponentExtensions">
+    <Position X="30" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAg=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Utilities\ComponentExtensions.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.Utilities.ResolveAttribute" Collapsed="true">
+    <Position X="29.25" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Utilities\ComponentResolvingBehaviour.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.Utilities.ResolvePrefixTable">
+    <Position X="28.25" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Utilities\ComponentResolvingBehaviour.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.Utilities.ComponentResolvingBehaviour">
+    <Position X="16.75" Y="6.5" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Utilities\ComponentResolvingBehaviour.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Practices.UGUI_Management.Utilities.A">
+    <Position X="19" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Assets\ParkourMultiGame\Scripts\Utilities\ComponentResolvingBehaviour.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Font Name="맑은 고딕" Size="9" />
+</ClassDiagram>

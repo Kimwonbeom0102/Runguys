@@ -1,0 +1,402 @@
+// --- DraggablePanel.cs ---
+using UnityEngine;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class DraggablePanel : MonoBehaviour
+    {
+    }
+}
+
+// --- UI_Base.cs ---
+using Practices.UGUI_Management.Utilities;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.UI
+{
+    [RequireComponent(typeof(Canvas))]
+    public abstract class UI_Base : ComponentResolvingBehaviour
+    {
+        public int sortingOrder
+        {
+            get => _canvas.sortingOrder;
+            set => _canvas.sortingOrder = value;
+        }
+
+        public bool inputActionsEnabled
+        {
+            get => playerInputActions.asset.enabled;
+            set
+            {
+                if (value)
+                    playerInputActions.Enable();
+                else
+                    playerInputActions.Disable();
+            }
+        }
+
+        protected UI_Manager manager;
+        protected PlayerInputActions playerInputActions;
+        Canvas _canvas;
+        GraphicRaycaster _graphicRaycaster;
+        EventSystem _eventSystem;
+        PointerEventData _pointerEventData;
+        List<RaycastResult> _raycastResultBuffer;
+
+        public event Action onShow;
+        public event Action onHide;
+
+
+        protected override void Awake()
+        {
+            base.Awake();
+
+            _canvas = GetComponent<Canvas>();
+            _graphicRaycaster = GetComponent<GraphicRaycaster>();
+            _eventSystem = EventSystem.current;
+            _pointerEventData = new PointerEventData(_eventSystem);
+            _raycastResultBuffer = new List<RaycastResult>(1);
+            playerInputActions = new PlayerInputActions();
+            manager = UI_Manager.instance;
+            manager.Register(this);
+        }
+
+        protected virtual void Start() { }
+
+        public virtual void Show()
+        {
+            _canvas.enabled = true;
+            onShow?.Invoke();
+        }
+
+        public virtual void Hide()
+        {
+            _canvas.enabled = false;
+            onHide?.Invoke();
+        }
+
+        /// <summary>
+        /// 현재 Canvas 에 특정 컴포넌트가 존재하는지 탐색
+        /// </summary>
+        /// <typeparam name="T"> 탐색하고싶은 컴포넌트 타입 </typeparam>
+        /// <param name="pointerPosition"> 탐색하고싶은 위치 </param>
+        /// <param name="result"> 탐색 반환결과 </param>
+        /// <returns> 탐색 성공여부 </returns>
+        public bool TryGraphicRaycast<T>(Vector2 pointerPosition, out T result)
+            where T : Component
+        {
+            _pointerEventData.position = pointerPosition;
+            _raycastResultBuffer.Clear();
+            _graphicRaycaster.Raycast(_pointerEventData, _raycastResultBuffer);
+
+            if (_raycastResultBuffer.Count > 0)
+            {
+                if (_raycastResultBuffer[0].gameObject.TryGetComponent(out result))
+                    return true;
+            }
+
+            result = default;
+            return false;
+        }
+    }
+}
+
+// --- UI_ConfirmWindow.cs ---
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_ConfirmWindow : UI_Popup
+    {
+        [Resolve] TMP_Text _message;
+        [Resolve] Button _confirm;
+
+
+        public void Show(string message, UnityAction onConfirmed = null)
+        {
+            base.Show();
+
+            _message.text = message;
+            _confirm.onClick.RemoveAllListeners();
+            _confirm.onClick.AddListener(Hide);
+
+            if (onConfirmed != null) 
+                _confirm.onClick.AddListener(onConfirmed);
+        }
+    }
+}
+
+// --- UI_Equipments.cs ---
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Equipments : UI_Popup
+    {
+    }
+}
+
+// --- UI_Inventory.cs ---
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Inventory : UI_Popup
+    {
+        protected override void Start()
+        {
+            base.Start();
+
+            playerInputActions.UI.Click.performed += OnClick;
+        }
+
+        private void OnClick(InputAction.CallbackContext context)
+        {
+            if (TryGraphicRaycast(Mouse.current.position.ReadValue(), out CanvasRenderer renderer))
+            {
+                UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+                confirmWindow.Show("아직 인벤토리 구현된 사항 없음");
+            }
+        }
+    }
+}
+
+// --- UI_Manager.cs ---
+using Practices.UGUI_Management.Singletons;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Manager : Singleton<UI_Manager>
+    {
+        public UI_Manager()
+        {
+            _uis = new Dictionary<Type, UI_Base>(EXPECTED_MAX_UI_COUNT_IN_SCENE); // Reserve 수 : 한 장면에서 최대 사용할 수 있는 UI 갯수
+            _popupStack = new List<UI_Popup>(EXPECTED_MAX_POPUP_COUNT_IN_SCENE); // Reserve 수 : 한 장면에서 최대 동시에 띄울 수 있는 Popup 갯수
+        }
+
+
+        public IEnumerable<UI_Popup> popups => _popupStack;
+
+        const int EXPECTED_MAX_UI_COUNT_IN_SCENE = 30;
+        const int EXPECTED_MAX_POPUP_COUNT_IN_SCENE = 10;
+        Dictionary<Type, UI_Base> _uis; // 현재 장면에서 사용할 수 있는 UI 목록
+        UI_Screen _screen; // 현재 장면의 스크린을 차지하는 UI
+        List<UI_Popup> _popupStack; // 현재 활성화되어있는 팝업들을 순차적으로 관리하는 스택
+
+
+        public void Register(UI_Base ui)
+        {
+            if (_uis.TryAdd(ui.GetType(), ui))
+            {
+                Debug.Log($"Registered UI {ui.GetType()}");
+
+                if (ui is UI_Popup)
+                {
+                    ui.onShow += () => Push((UI_Popup)ui);
+                    ui.onHide += () => Pop((UI_Popup)ui);
+                }
+            }
+            else
+            {
+                throw new Exception($"Failed to register ui {ui.GetType()}. already exist.");
+            }
+        }
+
+        public T Resolve<T>()
+            where T : UI_Base
+        {
+            if (_uis.TryGetValue(typeof(T), out UI_Base result))
+            {
+                return (T)result;
+            }
+            else
+            {
+                string path = $"UI/Canvas - {typeof(T).Name.Substring(3)}";
+                UI_Base prefab = Resources.Load<UI_Base>(path);
+
+                if (prefab == null)
+                    throw new Exception($"Failed to resolve ui {typeof(T)}. Not exist.");
+
+                return (T)GameObject.Instantiate(prefab);
+            }
+        }
+
+        public void SetScreen(UI_Screen screen)
+        {
+            // 이미 활성화된 스크린 UI 가 있으면 끔
+            if (_screen != null)
+            {
+                _screen.inputActionsEnabled = false;
+                _screen.Hide();
+            }
+
+            _screen = screen;
+            _screen.sortingOrder = 0;
+            _screen.inputActionsEnabled = true;
+        }
+
+        public void Push(UI_Popup popup)
+        {
+            int popupIndex = _popupStack.FindLastIndex(ui => ui == popup);
+
+            // 이미 이 팝업이 활성화 되어있다면, 제거하고 가장뒤로 보내야함
+            if (popupIndex >= 0)
+            {
+                _popupStack.RemoveAt(popupIndex);
+            }
+
+            int sortingOrder = 1;
+
+            if (_popupStack.Count > 0)
+            {
+                UI_Popup prevPopup = _popupStack[^1];
+                prevPopup.inputActionsEnabled = false;
+                sortingOrder = prevPopup.sortingOrder + 1;
+            }
+
+            popup.sortingOrder = sortingOrder;
+            popup.inputActionsEnabled = true;
+            _popupStack.Add(popup);
+            Debug.Log($"Pushed {popup.name}");
+        }
+
+        public void Pop(UI_Popup popup)
+        {
+            int popupIndex = _popupStack.FindLastIndex(ui => ui == popup);
+
+            if (popupIndex < 0)
+                throw new Exception($"Failed to remove popup. {popup.name}");
+
+            // 빼려는게 마지막이었으면 이전꺼를 활성화
+            if (popupIndex == _popupStack.Count - 1)
+            {
+                _popupStack[popupIndex].inputActionsEnabled = false;
+
+                // 이전 팝업이 존재한다면
+                if (popupIndex > 0)
+                    _popupStack[popupIndex - 1].inputActionsEnabled = true;
+            }
+
+            _popupStack.RemoveAt(popupIndex);
+
+            Debug.Log($"Popped {popup.name}");
+        }
+    }
+}
+
+// --- UI_Popup.cs ---
+using UnityEngine.InputSystem;
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+using System.Collections.Generic;
+using Practices.UGUI_Management.Utilities;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Popup : UI_Base
+    {
+        [Resolve] Image _panel;
+        private bool _onDragging;
+
+
+        protected override void Start()
+        {
+            base.Start();
+
+            playerInputActions.UI.Click.performed += CheckOtherUIClicked;
+            playerInputActions.UI.RightClick.performed += CheckOtherUIClicked;
+            playerInputActions.UI.Drag.performed += OnDrag;
+        }
+
+        void CheckOtherUIClicked(InputAction.CallbackContext context)
+        {
+            if (context.ReadValueAsButton() == false)
+                return;
+
+            Vector2 mousePosition = Mouse.current.position.ReadValue();
+
+            // 일단 이 Canvas 에서 뭔갈 클릭했는지 확인
+            if (TryGraphicRaycast(mousePosition, out CanvasRenderer renderer))
+            {
+                // Nothing todo
+            }
+            else
+            {
+                IEnumerable<UI_Popup> popups = manager.popups;
+
+                foreach (UI_Popup popup in popups)
+                {
+                    if (popup == this)
+                        continue;
+
+                    // 유저가 다른 팝업 건드림. 건드린 팝업을 최상단으로 보내줌.
+                    if (popup.TryGraphicRaycast(mousePosition, out renderer))
+                    {
+                        popup.Show();
+                        break;
+                    }
+                }
+            }
+        }
+
+        void OnDrag(InputAction.CallbackContext context)
+        {
+            if (TryGraphicRaycast(Mouse.current.position.ReadValue(), out Image result))
+            {
+                if (result == _panel)
+                {
+                    StartCoroutine(C_OnDrag(context, Mouse.current.position.ReadValue() - (Vector2)_panel.transform.position));
+                }
+            }
+        }
+
+        IEnumerator C_OnDrag(InputAction.CallbackContext context, Vector2 offset)
+        {
+            while (context.action.ReadValue<Vector2>().magnitude > 0)
+            {
+                _panel.transform.position = Mouse.current.position.ReadValue() + offset;
+                yield return null;
+            }
+        }
+    }
+}
+
+// --- UI_Screen.cs ---
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Screen : UI_Base
+    {
+        public override void Show()
+        {
+            base.Show();
+
+            manager.SetScreen(this);
+        }
+    }
+}
+
+// --- UI_UGUIManagementExampleScreen.cs ---
+using UnityEngine;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_UGUIManagementExampleScreen : UI_Screen
+    {
+    }
+}
+

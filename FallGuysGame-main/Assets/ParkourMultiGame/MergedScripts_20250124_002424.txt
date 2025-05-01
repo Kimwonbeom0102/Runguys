@@ -1,0 +1,5353 @@
+=== Script Merge Summary ===
+Date: 2025-01-24 00:24:24
+Total Files: 37
+File Names:
+- CloudSaveManager.cs
+- LoginManager.cs
+- SignupManager.cs
+- ClientCharacterController.cs
+- PhotonCharacterControl.cs
+- PhotonCustomPropertyTypes.cs
+- PhotonEventCode.cs
+- PhotonManager.cs
+- PunAutoSyncMonoBehaviour.cs
+- PlayerInputActions.cs
+- Singleton`1.cs
+- DraggablePanel.cs
+- UI_Equipments.cs
+- UI_Inventory.cs
+- UI_UGUIManagementExampleScreen.cs
+- GameTimerUI.cs
+- LobbyGameManager.cs
+- RoomListSlot.cs
+- RoomPlayerInfoSlot.cs
+- SettingsManager.cs
+- UI_Base.cs
+- UI_CharacterSelect.cs
+- UI_ConfirmWindow.cs
+- UI_CreateRoomOption.cs
+- UI_ExitGame.cs
+- UI_Lobby.cs
+- UI_Manager.cs
+- UI_MapSelect.cs
+- UI_Popup.cs
+- UI_Room.cs
+- UI_Screen.cs
+- ComponentExtensions.cs
+- ComponentResolvingBehaviour.cs
+- FinishLineTrigger.cs
+- GamePlayManager.cs
+- GamePlayWorkflow.cs
+- LobbySceneWorkflow.cs
+============================
+
+// --- CloudSaveManager.cs ---
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Unity.Services.Authentication;
+using Unity.Services.CloudSave;
+using Unity.Services.Core;
+using UnityEngine;
+using Newtonsoft.Json;
+
+public class CloudSaveManager : MonoBehaviour
+{
+    private async void Awake()
+    {
+        if (!UnityServices.State.Equals(ServicesInitializationState.Initialized))
+        {
+            await UnityServices.InitializeAsync();
+        }
+
+        if (!AuthenticationService.Instance.IsSignedIn)
+        {
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+            Debug.Log("Player authenticated successfully.");
+        }
+    }
+
+    public async Task SaveUserData(string userID, string userPassword, string nickname)
+    {
+        try
+        {
+            await EnsureSignedIn();
+
+            var existingData = await CloudSaveService.Instance.Data.LoadAsync(new HashSet<string>());
+            var dataToSave = new Dictionary<string, object>();
+
+            // Preserve existing data
+            foreach (var kvp in existingData)
+            {
+                dataToSave[kvp.Key] = kvp.Value;
+            }
+
+            string newKey = $"User_{Guid.NewGuid()}";
+            var userData = new Dictionary<string, string>
+            {
+                { "UserID", userID },
+                { "UserPassword", userPassword },
+                { "Nickname", nickname }
+            };
+
+            dataToSave[newKey] = JsonConvert.SerializeObject(userData);
+
+            await CloudSaveService.Instance.Data.ForceSaveAsync(dataToSave);
+            Debug.Log("User data saved successfully.");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error saving user data: {ex.Message}");
+        }
+    }
+
+    public async Task<List<Dictionary<string, string>>> LoadAllUserData()
+    {
+        try
+        {
+            await EnsureSignedIn();
+            var data = await CloudSaveService.Instance.Data.LoadAsync(new HashSet<string>());
+
+            var userList = new List<Dictionary<string, string>>();
+
+            foreach (var kvp in data)
+            {
+                try
+                {
+                    var userData = JsonConvert.DeserializeObject<Dictionary<string, string>>(kvp.Value);
+                    userList.Add(userData);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to parse user data for key {kvp.Key}: {ex.Message}");
+                }
+            }
+
+            return userList;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error loading user data: {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task EnsureSignedIn()
+    {
+        if (!AuthenticationService.Instance.IsSignedIn)
+        {
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+            Debug.Log("Player authenticated successfully.");
+        }
+    }
+
+    //[ADDED] Helper to find user by ID and return the Nickname if found
+    public async Task<string> GetNicknameByUserID(string userID)
+    {
+        var allUsers = await LoadAllUserData();
+        if (allUsers == null) return null;
+
+        var found = allUsers.FirstOrDefault(u => u["UserID"] == userID);
+        if (found != null && found.ContainsKey("Nickname"))
+        {
+            return found["Nickname"];
+        }
+        return null;
+    }
+}
+
+
+// --- LoginManager.cs ---
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using TMPro;
+using Photon.Pun;
+using Photon.Realtime;  //[ADDED]
+using System.Threading.Tasks;
+
+public class LoginManager : MonoBehaviour
+{
+    public TMP_InputField IDInputField;
+    public TMP_InputField PasswordInputField;
+    public GameObject SignupCanvas;
+    public GameObject NotificationCanvas;
+    public TextMeshProUGUI NotificationText;
+
+    [SerializeField] private CloudSaveManager cloudSaveManager;
+
+    private void Start()
+    {
+        if (cloudSaveManager == null)
+        {
+            Debug.LogError("CloudSaveManager not assigned in Inspector.");
+        }
+    }
+
+    public async void OnLoginButtonClicked()
+    {
+        var userDataList = await cloudSaveManager.LoadAllUserData();
+        if (userDataList != null)
+        {
+            foreach (var userData in userDataList)
+            {
+                if (userData["UserID"] == IDInputField.text &&
+                    userData["UserPassword"] == PasswordInputField.text)
+                {
+                    // [CHANGED] If ID/PW correct, we connect to Photon with that userId
+                    PhotonNetwork.Disconnect(); // first ensure a clean state
+                    await Task.Delay(50);
+
+                    // [ADDED] Setting up Photon Auth
+                    PhotonNetwork.AuthValues = new AuthenticationValues();
+                    PhotonNetwork.AuthValues.UserId = IDInputField.text;
+                    // If someone else logs in with the same userId, old session is kicked
+
+                    // [ADDED] Retrieve Nickname from Cloud Save
+                    string nickname = userData["Nickname"];
+                    if (!string.IsNullOrEmpty(nickname))
+                    {
+                        PhotonNetwork.NickName = nickname;
+                    }
+                    else
+                    {
+                        PhotonNetwork.NickName = IDInputField.text; // fallback
+                    }
+
+                    // [ADDED] Alternatively, you could also do:
+                    // string foundNick = await cloudSaveManager.GetNicknameByUserID(IDInputField.text);
+                    // PhotonNetwork.NickName = foundNick ?? IDInputField.text;
+
+                    PhotonNetwork.ConnectUsingSettings();
+
+                    Debug.Log("�α��� ����!");
+                    SceneManager.LoadScene("Lobby");
+                    return;
+                }
+            }
+        }
+        ShowNotification("�α��� ����: ID Ȥ�� ��й�ȣ�� �߸��Ǿ����ϴ�.");
+    }
+
+    public void OnSignupButtonClicked()
+    {
+        SignupCanvas.SetActive(true);
+    }
+
+    private void ShowNotification(string message)
+    {
+        NotificationCanvas.SetActive(true);
+        NotificationText.text = message;
+    }
+}
+
+
+// --- SignupManager.cs ---
+using UnityEngine;
+using TMPro;
+using System.Collections.Generic;
+using System.Linq;
+
+public class SignupManager : MonoBehaviour
+{
+    public TMP_InputField IDInputField;
+    public TMP_InputField PasswordInputField;
+    public TMP_InputField NicknameInputField;
+    public GameObject NotificationCanvas;
+    public TextMeshProUGUI NotificationText;
+    public GameObject SignupCanvas;
+
+    [SerializeField] private CloudSaveManager cloudSaveManager;
+
+    private void Start()
+    {
+        if (cloudSaveManager == null)
+        {
+            Debug.LogError("CloudSaveManager�� �Ҵ���� �ʾҽ��ϴ�.");
+        }
+    }
+
+    public async void OnSignupCompleteButtonClicked()
+    {
+        // �Է� �ʵ尡 ����ִ� ��� ó��
+        if (string.IsNullOrEmpty(IDInputField.text) ||
+            string.IsNullOrEmpty(PasswordInputField.text) ||
+            string.IsNullOrEmpty(NicknameInputField.text))
+        {
+            ShowNotification("��� ĭ�� ä���ּ���!");
+            return;
+        }
+
+        // ��й�ȣ ���� Ȯ��
+        if (PasswordInputField.text.Length < 6)
+        {
+            ShowNotification("��й�ȣ�� �ּ� 6�� �̻��̾�� �մϴ�.");
+            return;
+        }
+
+        // ��� ���� ������ �ε�
+        var existingUsers = await cloudSaveManager.LoadAllUserData();
+        if (existingUsers != null)
+        {
+            // ������ ID �Ǵ� �г����� �ִ��� Ȯ��
+            if (existingUsers.Any(user => user["UserID"] == IDInputField.text))
+            {
+                ShowNotification("�̹� ��� ���� ID�Դϴ�. �ٸ� ID�� �Է��ϼ���.");
+                return;
+            }
+
+            if (existingUsers.Any(user => user["Nickname"] == NicknameInputField.text))
+            {
+                ShowNotification("�̹� ��� ���� �г����Դϴ�. �ٸ� �г����� �Է��ϼ���.");
+                return;
+            }
+        }
+
+        // Cloud Save�� ���� ������ ����
+        await cloudSaveManager.SaveUserData(
+            IDInputField.text,
+            PasswordInputField.text,
+            NicknameInputField.text);
+
+        ShowNotification("ȸ������ �Ϸ�!");
+        SignupCanvas.SetActive(false);
+    }
+
+    public void OnCancelButtonClicked()
+    {
+        SignupCanvas.SetActive(false);
+    }
+
+    private void ShowNotification(string message)
+    {
+        NotificationCanvas.SetActive(true);
+        NotificationText.text = message;
+    }
+
+    // Ȯ�� ��ư Ŭ�� �� �˸�â �ݱ�
+    public void OnNotificationConfirmButtonClicked()
+    {
+        NotificationCanvas.SetActive(false);
+    }
+}
+
+
+// --- ClientCharacterController.cs ---
+/*// 0115V2[CHANGED/ADDED code with comments]
+
+using Photon;
+using Photon.Pun;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.InputSystem; // [ADDED] New Input System
+
+namespace Practices.PhotonPunClient.Network
+{
+    public class ClientCharacterController : MonoBehaviour, IPunInstantiateMagicCallback
+    {
+        // 멀티톤
+        public static Dictionary<int, ClientCharacterController> controllers
+            = new Dictionary<int, ClientCharacterController>();
+
+        public int ownerActorNr => _photonView.OwnerActorNr;
+        public int photonViewId => _photonView.ViewID;
+        public bool isInitialized { get; private set; }
+        public Pickable pickable { get; set; }
+
+        PhotonView _photonView;
+        NavMeshAgent _agent;
+
+        // [CHANGED] New Input System: PlayerInput
+        private PlayerInput _playerInput;
+        private InputAction _inputActions; // [ADDED] 기존 InputActions
+        private InputAction _leftClickAction;
+
+        [SerializeField] LayerMask _groundMask;
+        [SerializeField] LayerMask _pickable;
+        [SerializeField] LayerMask _kickable;
+        [SerializeField] Transform _rightHand;
+        [SerializeField] Transform _leftHand;
+
+        // [ADDED] 파쿠르/폴가이즈 스타일 속성
+        [Header("Parkour Settings")]
+        [SerializeField] float walkSpeed = 3.5f;
+        [SerializeField] float sprintSpeed = 6f;
+        [SerializeField] float jumpForce = 7f;
+        [SerializeField] float rollDistance = 3f;
+        // 상황에 따라 슬라이딩, 벽잡기 등 추가
+
+        bool isSprinting = false;
+
+        private void Awake()
+        {
+            _photonView = GetComponent<PhotonView>();
+            _agent = GetComponent<NavMeshAgent>();
+
+            // [ADDED] PlayerInput 컴포넌트 찾기
+            _playerInput = GetComponent<PlayerInput>();
+            if (_playerInput != null)
+            {
+                // 예: InputActions에 "LeftClick" 액션이 존재해야 함
+                _leftClickAction = _playerInput.actions["LeftClick"];
+            }
+            else
+            {
+                Debug.LogError("PlayerInput component not found!");
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (_leftClickAction != null)
+            {
+                _leftClickAction.performed += OnLeftClickHandler;
+                _leftClickAction.Enable();
+            }
+            // [ADDED] Enable our custom input actions
+            SetupParkourActions(true);
+        }
+
+        private void OnDisable()
+        {
+            if (_leftClickAction != null)
+            {
+                _leftClickAction.performed -= OnLeftClickHandler;
+                _leftClickAction.Disable();
+            }
+            // [ADDED] Disable our custom input actions
+            SetupParkourActions(false);
+        }
+
+        private void OnDestroy()
+        {
+            if (_leftClickAction != null)
+            {
+                _leftClickAction.performed -= OnLeftClickHandler;
+            }
+        }
+
+        // [ADDED] 파쿠르 입력 설정 (WASD, Shift, Space, Ctrl 등)
+        void SetupParkourActions(bool enable)
+        {
+            if (_inputActions == null) return; // PhotonView 소유자가 아니면 null 일수 있음
+
+            if (enable)
+            {
+                // 이동(WASD), 스프린트(Shift), 점프(Space), 구르기(Ctrl) 등
+                _inputActions.Player.Move.Enable();
+                _inputActions.Player.Sprint.performed += OnSprintPerformed;
+                _inputActions.Player.Sprint.canceled += OnSprintCanceled;
+
+                _inputActions.Player.Jump.performed += OnJump;
+                _inputActions.Player.Roll.performed += OnRoll;
+
+                // 균형 잡기(Q/E), 상호작용(F), 던지기(R) 등
+                _inputActions.Player.LeanLeft.performed += OnLeanLeft;
+                _inputActions.Player.LeanRight.performed += OnLeanRight;
+                _inputActions.Player.Interact.performed += OnInteract;
+                _inputActions.Player.ThrowItem.performed += OnThrowItem;
+
+                _inputActions.Player.Move.Enable();
+                _inputActions.Player.Sprint.Enable();
+                _inputActions.Player.Jump.Enable();
+                _inputActions.Player.Roll.Enable();
+                _inputActions.Player.LeanLeft.Enable();
+                _inputActions.Player.LeanRight.Enable();
+                _inputActions.Player.Interact.Enable();
+                _inputActions.Player.ThrowItem.Enable();
+            }
+            else
+            {
+                _inputActions.Player.Move.Disable();
+                _inputActions.Player.Sprint.performed -= OnSprintPerformed;
+                _inputActions.Player.Sprint.canceled -= OnSprintCanceled;
+
+                _inputActions.Player.Jump.performed -= OnJump;
+                _inputActions.Player.Roll.performed -= OnRoll;
+
+                _inputActions.Player.LeanLeft.performed -= OnLeanLeft;
+                _inputActions.Player.LeanRight.performed -= OnLeanRight;
+                _inputActions.Player.Interact.performed -= OnInteract;
+                _inputActions.Player.ThrowItem.performed -= OnThrowItem;
+
+                _inputActions.Player.Sprint.Disable();
+                _inputActions.Player.Jump.Disable();
+                _inputActions.Player.Roll.Disable();
+                _inputActions.Player.LeanLeft.Disable();
+                _inputActions.Player.LeanRight.Disable();
+                _inputActions.Player.Interact.Disable();
+                _inputActions.Player.ThrowItem.Disable();
+            }
+        }
+
+        public void OnLeftClickHandler(InputAction.CallbackContext context)
+        {
+            if (this == null) return;
+            Debug.Log("LeftClick performed via PlayerInput");
+
+            // [ADDED] 여기서도 '잡기' 또는 '밀기'로 사용할 수 있음
+            // 만약 pickable과 로직이 충돌하면, OnLeftClick(InputAction.CallbackContext) 기존 코드를 참조
+        }
+
+        public Transform GetEmptyHand()
+        {
+            return _rightHand; // 일단 오른손 사용
+        }
+
+        public void OnPhotonInstantiate(PhotonMessageInfo info)
+        {
+            PhotonNetwork.LocalPlayer.SetCustomProperties(new ExitGames.Client.Photon.Hashtable
+            {
+                { PlayerInGamePlayPropertyKey.IS_CHARACTER_SPAWNED, true }
+            });
+
+            isInitialized = true;
+
+            if (_photonView.IsMine)
+            {
+                _agent.enabled = true;
+
+                // [CHANGED] 기존 InputActions 직접 Enable
+                _inputActions = new InputActions();
+                _inputActions.Player.Fire.performed += OnLeftClick;
+                _inputActions.Player.MouseRight.performed += OnRightClick;
+                _inputActions.Enable();
+            }
+            else
+            {
+                _agent.enabled = false;
+            }
+
+            controllers.Add(_photonView.OwnerActorNr, this);
+            Debug.Log($"[ClientCharacterController] Instantiated. Actor={_photonView.OwnerActorNr}");
+        }
+
+        // [CHANGED] 기존 Mouse LeftClick - "Fire" -> OnLeftClick
+        void OnLeftClick(InputAction.CallbackContext context)
+        {
+            if (pickable)
+            {
+                pickable.Drop();
+                return;
+            }
+            else
+            {
+                Collider[] cols = Physics.OverlapSphere(transform.position, 1f, _pickable);
+                if (cols.Length > 0)
+                {
+                    cols[0].GetComponent<Pickable>().PickUp();
+                    return;
+                }
+            }
+
+            if (Physics.SphereCast(transform.position, 1f, transform.forward, out RaycastHit hit, 1f, _kickable))
+            {
+                Kickable kickable = hit.collider.GetComponent<Kickable>();
+                kickable.Kick((hit.point - transform.position) * 3f);
+            }
+        }
+
+        // [CHANGED] 기존 Mouse RightClick - "MouseRight" -> OnRightClick
+        void OnRightClick(InputAction.CallbackContext context)
+        {
+            if (!_photonView.IsMine) return;
+            Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+            Debug.DrawRay(ray.origin, ray.direction);
+
+            if (Physics.Raycast(ray, out RaycastHit hit, float.PositiveInfinity, _groundMask))
+            {
+                _agent.SetDestination(hit.point);
+            }
+        }
+
+        // [ADDED] 파쿠르 함수들
+        void OnSprintPerformed(InputAction.CallbackContext ctx)
+        {
+            isSprinting = true;
+            _agent.speed = sprintSpeed;
+        }
+        void OnSprintCanceled(InputAction.CallbackContext ctx)
+        {
+            isSprinting = false;
+            _agent.speed = walkSpeed;
+        }
+
+        void OnJump(InputAction.CallbackContext ctx)
+        {
+            // 점프 (NavMeshAgent 쓰면 물리 점프 구현이 좀 까다롭지만 예시)
+            Debug.Log("Jump pressed!");
+            // NavMeshAgent로는 점프 적용이 어려우니, 임시로...
+            // TODO: 직접 Rigidbody.AddForce or CharacterController
+        }
+
+        void OnRoll(InputAction.CallbackContext ctx)
+        {
+            // 구르기 (Ctrl)
+            Debug.Log("Roll performed!");
+            // TODO: 애니메이션, 이동 처리
+        }
+
+        void OnLeanLeft(InputAction.CallbackContext ctx)
+        {
+            Debug.Log("Lean Left (Q)");
+            // 좁은 다리 등에서 균형 기울이기
+        }
+
+        void OnLeanRight(InputAction.CallbackContext ctx)
+        {
+            Debug.Log("Lean Right (E)");
+        }
+
+        void OnInteract(InputAction.CallbackContext ctx)
+        {
+            Debug.Log("Interact(F) pressed");
+            // 아이템 줍기, 문 열기 등
+        }
+
+        void OnThrowItem(InputAction.CallbackContext ctx)
+        {
+            Debug.Log("Throw(R) pressed");
+            // 잡은 아이템 던지기
+        }
+    }
+}*/
+
+
+
+
+
+/*// 0116-V2 [CHANGED/ADDED code with comments]
+
+using Photon;
+using Photon.Pun;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.InputSystem;  // [ADDED] New Input System
+
+namespace Practices.PhotonPunClient.Network
+{
+    public class ClientCharacterController : MonoBehaviour, IPunInstantiateMagicCallback
+    {
+        // 멀티톤
+        public static Dictionary<int, ClientCharacterController> controllers
+            = new Dictionary<int, ClientCharacterController>();
+
+        public int ownerActorNr => _photonView.OwnerActorNr;
+        public int photonViewId => _photonView.ViewID;
+        public bool isInitialized { get; private set; }
+        
+        //public Pickable pickable { get; set; }
+
+        PhotonView _photonView;
+        NavMeshAgent _agent;
+
+        // [CHANGED] New Input System: PlayerInput
+        private PlayerInput _playerInput;
+
+        // [CHANGED] 자동 생성된 클래스 이름이 "PlayerInputActions"라고 가정
+        private PlayerInputActions _inputActions;
+
+        // [ADDED] WASD 움직임을 위한 액션
+        private InputAction _moveAction; // Move (Vector2)
+
+        [SerializeField] LayerMask _groundMask;
+        [SerializeField] LayerMask _pickable;
+        [SerializeField] LayerMask _kickable;
+        [SerializeField] Transform _rightHand;
+        [SerializeField] Transform _leftHand;
+
+        // [ADDED] 이동속도
+        [SerializeField] float moveSpeed = 3.5f;
+
+        private void Awake()
+        {
+            _photonView = GetComponent<PhotonView>();
+            _agent = GetComponent<NavMeshAgent>();
+
+            // [CHANGED] PlayerInput 컴포넌트 찾기
+            _playerInput = GetComponent<PlayerInput>();
+            if (_playerInput != null)
+            {
+                // .inputactions 파일에서 "Move" 액션이 존재한다고 가정
+                _moveAction = _playerInput.actions["Move"];
+                // (만약 "Move" 대신 다른 이름이면 코드 수정)
+            }
+            else
+            {
+                Debug.LogError("PlayerInput component not found!");
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (_moveAction != null)
+            {
+                // [ADDED] Move 액션의 performed/canceled 이벤트 등록
+                _moveAction.performed += OnMovePerformed;
+                _moveAction.canceled += OnMoveCanceled;
+                _moveAction.Enable();
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (_moveAction != null)
+            {
+                _moveAction.performed -= OnMovePerformed;
+                _moveAction.canceled -= OnMoveCanceled;
+                _moveAction.Disable();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            // 이벤트 해제
+            if (_moveAction != null)
+            {
+                _moveAction.performed -= OnMovePerformed;
+                _moveAction.canceled -= OnMoveCanceled;
+            }
+        }
+
+        // [ADDED] Move 액션 처리
+        private void OnMovePerformed(InputAction.CallbackContext context)
+        {
+            if (!_photonView.IsMine) return; // 내 캐릭터만 제어
+
+            // Vector2: (x = A/D, y = W/S)
+            Vector2 input = context.ReadValue<Vector2>();
+            // NavMeshAgent 이용: 현재 위치 + (방향 * 속도)
+            Vector3 moveDir = new Vector3(input.x, 0f, input.y);
+
+            // [CHANGED] NavMeshAgent 로 즉시 SetDestination
+            // 단, 매 프레임마다 반복 호출은 과도할 수 있음 → 예시로 작성
+            Vector3 targetPos = transform.position + moveDir * moveSpeed * Time.deltaTime;
+            _agent.SetDestination(targetPos);
+        }
+
+        private void OnMoveCanceled(InputAction.CallbackContext context)
+        {
+            if (!_photonView.IsMine) return;
+
+            // [ADDED] WASD 키에서 손 뗐을 때, 
+            // 일단 현재 위치에 멈추도록 agent Destination을 자기 위치로 설정
+            _agent.SetDestination(transform.position);
+        }
+
+        public Transform GetEmptyHand()
+        {
+            return _rightHand; // 일단 오른손 사용
+        }
+
+        public void OnPhotonInstantiate(PhotonMessageInfo info)
+        {
+            PhotonNetwork.LocalPlayer.SetCustomProperties(new ExitGames.Client.Photon.Hashtable
+            {
+                { PlayerInGamePlayPropertyKey.IS_CHARACTER_SPAWNED, true }
+            });
+
+            isInitialized = true;
+
+            if (_photonView.IsMine)
+            {
+                _agent.enabled = true;
+
+                // [CHANGED] PlayerInputActions 인스턴스 생성
+                _inputActions = new PlayerInputActions();
+                // [CHANGED] 원래 Fire/MouseRight 등 있었지만, 여기서는 WASD만 사용
+                // _inputActions.Player.Fire.performed += ... 제거함
+
+                _inputActions.Enable();
+            }
+            else
+            {
+                _agent.enabled = false;
+            }
+
+            controllers.Add(_photonView.OwnerActorNr, this);
+            Debug.Log($"[ClientCharacterController] Instantiated. Actor={_photonView.OwnerActorNr}");
+        }
+    }
+}
+*/
+
+
+
+// --- PhotonCharacterControl.cs ---
+using Photon.Pun;       // [ADDED] Photon
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Photon 환경에서 동작하는 캐릭터 컨트롤러 예시.
+/// - 로컬 플레이어만 입력 + 카메라를 활성화한다.
+/// - OwnershipTransfer=Fixed 시, 각 클라이언트가 직접 Instantiate 해야 자기 캐릭터가 IsMine.
+/// </summary>
+namespace Supercyan.FreeSample
+{
+    // [CHANGED] MonoBehaviourPun으로 교체 (PhotonView, photonView.IsMine 사용 위해)
+    public class PhotonCharacterControl : MonoBehaviourPun
+    {
+        private enum ControlMode
+        {
+            /// <summary>
+            /// Up=전진, Down=후진, Left/Right=회전 (탱크 컨트롤)
+            /// </summary>
+            Tank,
+
+            /// <summary>
+            /// 카메라 방향 기준, W/A/S/D 이동 (3인칭 일반)
+            /// </summary>
+            Direct
+        }
+
+        // --- 이동/점프 파라미터 ---
+        [Header("Movement Settings")]
+        [SerializeField] private float m_moveSpeed = 2f;
+        [SerializeField] private float m_turnSpeed = 200f;
+        [SerializeField] private float m_jumpForce = 4f;
+
+        // --- 애니메이터, 리지드바디 등 ---
+        [Header("Components")]
+        [SerializeField] private Animator m_animator = null;
+        [SerializeField] private Rigidbody m_rigidBody = null;
+
+        [Header("Control Mode")]
+        [SerializeField] private ControlMode m_controlMode = ControlMode.Direct;
+
+        // --- 내부 변수 ---
+        private float m_currentV = 0;
+        private float m_currentH = 0;
+
+        private readonly float m_interpolation = 10f;
+        private readonly float m_walkScale = 0.33f;
+        private readonly float m_backwardsWalkScale = 0.16f;
+        private readonly float m_backwardRunScale = 0.66f;
+
+        private bool m_wasGrounded;
+        private Vector3 m_currentDirection = Vector3.zero;
+
+        private float m_jumpTimeStamp = 0;
+        private float m_minJumpInterval = 0.25f;
+        private bool m_jumpInput = false;
+
+        private bool m_isGrounded;
+        private List<Collider> m_collisions = new List<Collider>();
+
+        // [ADDED] 로컬 카메라. 캐릭터 프리팹에 붙은 카메라를 할당
+        [Header("Local Camera")]
+        [SerializeField] private Camera characterCamera = null;
+
+        // [ADDED] 오디오 리스너도 필요하다면
+        [SerializeField] private AudioListener audioListener = null;
+
+        // [ADDED] 추가된 PlayerController 관련 변수들
+        [Header("Player Controller Settings")]
+        [SerializeField] private float m_speedMultiplier = 1.0f; // 이동 속도 조절
+        [SerializeField] private float m_rotationMultiplier = 1.0f; // 회전 속도 조절
+
+        // [ADDED] 추가적인 입력 관련 변수들
+        private bool m_fireInput = false; // 예: 발사 버튼
+
+        private void Awake()
+        {
+            // 혹시 Inspector에 빠져 있으면 GetComponent로 찾음
+            if (!m_animator) m_animator = GetComponent<Animator>();
+            if (!m_rigidBody) m_rigidBody = GetComponent<Rigidbody>();
+
+            // [ADDED] 카메라/오디오가 없다면 시도해보기 (선택)
+            // if (!characterCamera) characterCamera = GetComponentInChildren<Camera>();
+            // if (!audioListener)   audioListener   = GetComponentInChildren<AudioListener>();
+
+            // [ADDED] 내 캐릭터가 아니라면 카메라 비활성화
+            if (!photonView.IsMine)
+            {
+                if (characterCamera)
+                {
+                    characterCamera.enabled = false;
+                }
+                if (audioListener)
+                {
+                    audioListener.enabled = false;
+                }
+            }
+        }
+
+        #region Ground Check
+        private void OnCollisionEnter(Collision collision)
+        {
+            CheckCollisionGrounded(collision, true);
+        }
+
+        private void OnCollisionStay(Collision collision)
+        {
+            CheckCollisionGrounded(collision, false);
+        }
+
+        private void OnCollisionExit(Collision collision)
+        {
+            if (m_collisions.Contains(collision.collider))
+            {
+                m_collisions.Remove(collision.collider);
+            }
+            if (m_collisions.Count == 0)
+            {
+                m_isGrounded = false;
+            }
+        }
+
+        private void CheckCollisionGrounded(Collision collision, bool onEnter)
+        {
+            ContactPoint[] contactPoints = collision.contacts;
+            bool validNormal = false;
+
+            for (int i = 0; i < contactPoints.Length; i++)
+            {
+                // 위 방향과 어느정도 일치하면 지면으로 판단
+                if (Vector3.Dot(contactPoints[i].normal, Vector3.up) > 0.5f)
+                {
+                    validNormal = true;
+                    break;
+                }
+            }
+
+            if (validNormal)
+            {
+                m_isGrounded = true;
+                if (onEnter && !m_collisions.Contains(collision.collider))
+                {
+                    m_collisions.Add(collision.collider);
+                }
+                else if (!onEnter && !m_collisions.Contains(collision.collider))
+                {
+                    m_collisions.Add(collision.collider);
+                }
+            }
+            else
+            {
+                if (m_collisions.Contains(collision.collider))
+                {
+                    m_collisions.Remove(collision.collider);
+                }
+                if (m_collisions.Count == 0)
+                {
+                    m_isGrounded = false;
+                }
+            }
+        }
+        #endregion
+
+        private void Update()
+        {
+            // [ADDED] 로컬 캐릭터만 입력 처리
+            if (!photonView.IsMine) return;
+
+            if (!m_jumpInput && Input.GetKey(KeyCode.Space))
+            {
+                m_jumpInput = true;
+            }
+
+            // [ADDED] 추가된 입력 처리 예시 (발사 버튼 등)
+            if (Input.GetButtonDown("Fire1"))
+            {
+                m_fireInput = true;
+                // Fire 메서드 호출
+                Fire();
+            }
+        }
+
+        private void FixedUpdate()
+        {
+            // [ADDED] 로컬 캐릭터만 이동 처리
+            if (!photonView.IsMine) return;
+
+            m_animator.SetBool("Grounded", m_isGrounded);
+
+            switch (m_controlMode)
+            {
+                case ControlMode.Direct:
+                    DirectUpdate();
+                    break;
+
+                case ControlMode.Tank:
+                    TankUpdate();
+                    break;
+
+                default:
+                    Debug.LogError("Unsupported state");
+                    break;
+            }
+
+            m_wasGrounded = m_isGrounded;
+            m_jumpInput = false;
+            m_fireInput = false; // [ADDED] Fire 입력 초기화
+        }
+
+        private void TankUpdate()
+        {
+            float v = Input.GetAxis("Vertical");
+            float h = Input.GetAxis("Horizontal");
+
+            bool walk = Input.GetKey(KeyCode.LeftShift);
+
+            if (v < 0)
+            {
+                if (walk) { v *= m_backwardsWalkScale; }
+                else { v *= m_backwardRunScale; }
+            }
+            else if (walk)
+            {
+                v *= m_walkScale;
+            }
+
+            m_currentV = Mathf.Lerp(m_currentV, v * m_speedMultiplier, Time.deltaTime * m_interpolation); // [CHANGED] 속도 조절
+            m_currentH = Mathf.Lerp(m_currentH, h * m_rotationMultiplier, Time.deltaTime * m_interpolation); // [CHANGED] 회전 속도 조절
+
+            // 전/후진
+            transform.position += transform.forward * m_currentV * m_moveSpeed * Time.deltaTime;
+            // 좌/우 회전
+            transform.Rotate(0, m_currentH * m_turnSpeed * Time.deltaTime, 0);
+
+            m_animator.SetFloat("MoveSpeed", m_currentV);
+
+            JumpingAndLanding();
+        }
+
+        private void DirectUpdate()
+        {
+            float v = Input.GetAxis("Vertical");
+            float h = Input.GetAxis("Horizontal");
+
+            // Shift누르면 걷기
+            if (Input.GetKey(KeyCode.LeftShift))
+            {
+                v *= m_walkScale;
+                h *= m_walkScale;
+            }
+
+            m_currentV = Mathf.Lerp(m_currentV, v * m_speedMultiplier, Time.deltaTime * m_interpolation); // [CHANGED] 속도 조절
+            m_currentH = Mathf.Lerp(m_currentH, h * m_rotationMultiplier, Time.deltaTime * m_interpolation); // [CHANGED] 회전 속도 조절
+
+            // 카메라 방향기준 이동
+            Transform camera = Camera.main.transform;
+            Vector3 direction = camera.forward * m_currentV + camera.right * m_currentH;
+
+            float directionLength = direction.magnitude;
+            direction.y = 0;
+            direction = direction.normalized * directionLength;
+
+            if (direction != Vector3.zero)
+            {
+                m_currentDirection = Vector3.Slerp(m_currentDirection, direction, Time.deltaTime * m_interpolation);
+
+                transform.rotation = Quaternion.LookRotation(m_currentDirection);
+                transform.position += m_currentDirection * m_moveSpeed * Time.deltaTime;
+
+                m_animator.SetFloat("MoveSpeed", direction.magnitude);
+            }
+
+            JumpingAndLanding();
+        }
+
+        private void JumpingAndLanding()
+        {
+            bool jumpCooldownOver = (Time.time - m_jumpTimeStamp) >= m_minJumpInterval;
+
+            if (jumpCooldownOver && m_isGrounded && m_jumpInput)
+            {
+                m_jumpTimeStamp = Time.time;
+                m_rigidBody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
+            }
+        }
+
+        // [ADDED] Fire 메서드 예시
+        private void Fire()
+        {
+            // 발사 로직 구현
+            Debug.Log("Fire!");
+            // 예: 총알 생성, 발사 방향 설정 등
+        }
+    }
+}
+
+
+
+/* //0121-V1
+using Photon.Pun;       // [ADDED] Photon
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Photon 환경에서 동작하는 캐릭터 컨트롤러 예시.
+/// - 로컬 플레이어만 입력 + 카메라를 활성화한다.
+/// - OwnershipTransfer=Fixed 시, 각 클라이언트가 직접 Instantiate 해야 자기 캐릭터가 IsMine.
+/// </summary>
+namespace Supercyan.FreeSample
+{
+    // [CHANGED] MonoBehaviourPun으로 교체 (PhotonView, photonView.IsMine 사용 위해)
+    public class PhotonCharacterControl : MonoBehaviourPun
+    {
+        private enum ControlMode
+        {
+            /// <summary>
+            /// Up=전진, Down=후진, Left/Right=회전 (탱크 컨트롤)
+            /// </summary>
+            Tank,
+
+            /// <summary>
+            /// 카메라 방향 기준, W/A/S/D 이동 (3인칭 일반)
+            /// </summary>
+            Direct
+        }
+
+        // --- 이동/점프 파라미터 ---
+        [Header("Movement Settings")]
+        [SerializeField] private float m_moveSpeed = 2f;
+        [SerializeField] private float m_turnSpeed = 200f;
+        [SerializeField] private float m_jumpForce = 4f;
+
+        // --- 애니메이터, 리지드바디 등 ---
+        [Header("Components")]
+        [SerializeField] private Animator m_animator = null;
+        [SerializeField] private Rigidbody m_rigidBody = null;
+
+        [Header("Control Mode")]
+        [SerializeField] private ControlMode m_controlMode = ControlMode.Direct;
+
+        // --- 내부 변수 ---
+        private float m_currentV = 0;
+        private float m_currentH = 0;
+
+        private readonly float m_interpolation = 10f;
+        private readonly float m_walkScale = 0.33f;
+        private readonly float m_backwardsWalkScale = 0.16f;
+        private readonly float m_backwardRunScale = 0.66f;
+
+        private bool m_wasGrounded;
+        private Vector3 m_currentDirection = Vector3.zero;
+
+        private float m_jumpTimeStamp = 0;
+        private float m_minJumpInterval = 0.25f;
+        private bool m_jumpInput = false;
+
+        private bool m_isGrounded;
+        private List<Collider> m_collisions = new List<Collider>();
+
+        // [ADDED] 로컬 카메라. 캐릭터 프리팹에 붙은 카메라를 할당
+        [Header("Local Camera")]
+        [SerializeField] private Camera characterCamera = null;
+
+        // [ADDED] 오디오 리스너도 필요하다면
+        [SerializeField] private AudioListener audioListener = null;
+
+        private void Awake()
+        {
+            // 혹시 Inspector에 빠져 있으면 GetComponent로 찾음
+            if (!m_animator) m_animator = GetComponent<Animator>();
+            if (!m_rigidBody) m_rigidBody = GetComponent<Rigidbody>();
+
+            // [ADDED] 카메라/오디오가 없다면 시도해보기 (선택)
+            // if (!characterCamera) characterCamera = GetComponentInChildren<Camera>();
+            // if (!audioListener)   audioListener   = GetComponentInChildren<AudioListener>();
+
+            // [ADDED] 내 캐릭터가 아니라면 카메라 비활성화
+            if (!photonView.IsMine)
+            {
+                if (characterCamera)
+                {
+                    characterCamera.enabled = false;
+                }
+                if (audioListener)
+                {
+                    audioListener.enabled = false;
+                }
+            }
+        }
+
+        #region Ground Check
+        private void OnCollisionEnter(Collision collision)
+        {
+            CheckCollisionGrounded(collision, true);
+        }
+
+        private void OnCollisionStay(Collision collision)
+        {
+            CheckCollisionGrounded(collision, false);
+        }
+
+        private void OnCollisionExit(Collision collision)
+        {
+            if (m_collisions.Contains(collision.collider))
+            {
+                m_collisions.Remove(collision.collider);
+            }
+            if (m_collisions.Count == 0)
+            {
+                m_isGrounded = false;
+            }
+        }
+
+        private void CheckCollisionGrounded(Collision collision, bool onEnter)
+        {
+            ContactPoint[] contactPoints = collision.contacts;
+            bool validNormal = false;
+
+            for (int i = 0; i < contactPoints.Length; i++)
+            {
+                // 위 방향과 어느정도 일치하면 지면으로 판단
+                if (Vector3.Dot(contactPoints[i].normal, Vector3.up) > 0.5f)
+                {
+                    validNormal = true;
+                    break;
+                }
+            }
+
+            if (validNormal)
+            {
+                m_isGrounded = true;
+                if (onEnter && !m_collisions.Contains(collision.collider))
+                {
+                    m_collisions.Add(collision.collider);
+                }
+                else if (!onEnter && !m_collisions.Contains(collision.collider))
+                {
+                    m_collisions.Add(collision.collider);
+                }
+            }
+            else
+            {
+                if (m_collisions.Contains(collision.collider))
+                {
+                    m_collisions.Remove(collision.collider);
+                }
+                if (m_collisions.Count == 0)
+                {
+                    m_isGrounded = false;
+                }
+            }
+        }
+        #endregion
+
+        private void Update()
+        {
+            // [ADDED] 로컬 캐릭터만 입력 처리
+            if (!photonView.IsMine) return;
+
+            if (!m_jumpInput && Input.GetKey(KeyCode.Space))
+            {
+                m_jumpInput = true;
+            }
+        }
+
+        private void FixedUpdate()
+        {
+            // [ADDED] 로컬 캐릭터만 이동 처리
+            if (!photonView.IsMine) return;
+
+            m_animator.SetBool("Grounded", m_isGrounded);
+
+            switch (m_controlMode)
+            {
+                case ControlMode.Direct:
+                    DirectUpdate();
+                    break;
+
+                case ControlMode.Tank:
+                    TankUpdate();
+                    break;
+
+                default:
+                    Debug.LogError("Unsupported state");
+                    break;
+            }
+
+            m_wasGrounded = m_isGrounded;
+            m_jumpInput = false;
+        }
+
+        private void TankUpdate()
+        {
+            float v = Input.GetAxis("Vertical");
+            float h = Input.GetAxis("Horizontal");
+
+            bool walk = Input.GetKey(KeyCode.LeftShift);
+
+            if (v < 0)
+            {
+                if (walk) { v *= m_backwardsWalkScale; }
+                else { v *= m_backwardRunScale; }
+            }
+            else if (walk)
+            {
+                v *= m_walkScale;
+            }
+
+            m_currentV = Mathf.Lerp(m_currentV, v, Time.deltaTime * m_interpolation);
+            m_currentH = Mathf.Lerp(m_currentH, h, Time.deltaTime * m_interpolation);
+
+            // 전/후진
+            transform.position += transform.forward * m_currentV * m_moveSpeed * Time.deltaTime;
+            // 좌/우 회전
+            transform.Rotate(0, m_currentH * m_turnSpeed * Time.deltaTime, 0);
+
+            m_animator.SetFloat("MoveSpeed", m_currentV);
+
+            JumpingAndLanding();
+        }
+
+        private void DirectUpdate()
+        {
+            float v = Input.GetAxis("Vertical");
+            float h = Input.GetAxis("Horizontal");
+
+            // Shift누르면 걷기
+            if (Input.GetKey(KeyCode.LeftShift))
+            {
+                v *= m_walkScale;
+                h *= m_walkScale;
+            }
+
+            m_currentV = Mathf.Lerp(m_currentV, v, Time.deltaTime * m_interpolation);
+            m_currentH = Mathf.Lerp(m_currentH, h, Time.deltaTime * m_interpolation);
+
+            // 카메라 방향기준 이동
+            Transform camera = Camera.main.transform;
+            Vector3 direction = camera.forward * m_currentV + camera.right * m_currentH;
+
+            float directionLength = direction.magnitude;
+            direction.y = 0;
+            direction = direction.normalized * directionLength;
+
+            if (direction != Vector3.zero)
+            {
+                m_currentDirection = Vector3.Slerp(m_currentDirection, direction, Time.deltaTime * m_interpolation);
+
+                transform.rotation = Quaternion.LookRotation(m_currentDirection);
+                transform.position += m_currentDirection * m_moveSpeed * Time.deltaTime;
+
+                m_animator.SetFloat("MoveSpeed", direction.magnitude);
+            }
+
+            JumpingAndLanding();
+        }
+
+        private void JumpingAndLanding()
+        {
+            bool jumpCooldownOver = (Time.time - m_jumpTimeStamp) >= m_minJumpInterval;
+
+            if (jumpCooldownOver && m_isGrounded && m_jumpInput)
+            {
+                m_jumpTimeStamp = Time.time;
+                m_rigidBody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
+            }
+        }
+    }
+}
+*/
+
+// --- PhotonCustomPropertyTypes.cs ---
+namespace Practices.PhotonPunClient
+{
+    public static class PlayerInRoomPropertyKey
+    {
+        public const string IS_READY = "IsReady";
+    }
+
+    public static class PlayerInGamePlayPropertyKey
+    {
+        public const string IS_CHARACTER_SPAWNED = "IsCharacterSpawned";
+    }
+}
+
+// --- PhotonEventCode.cs ---
+namespace Practices.PhotonPunClient.Network
+{
+    public static class PhotonEventCode
+    {
+        public const byte SYNC_VIEW_ID = 1;
+    }
+}
+
+// --- PhotonManager.cs ---
+
+using Photon.Pun;
+using Photon.Realtime;
+using Practices.UGUI_Management.UI;
+using UnityEngine;
+
+namespace Practices.PhotonPunClient.Network
+{
+    public class PhotonManager : MonoBehaviourPunCallbacks
+    {
+        public static PhotonManager instance
+        {
+            get
+            {
+                if (s_instance == null)
+                {
+                    s_instance = new GameObject(nameof(PhotonManager)).AddComponent<PhotonManager>();
+                }
+                return s_instance;
+            }
+        }
+
+        static PhotonManager s_instance;
+
+        private void Awake()
+        {
+            if (s_instance)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            else
+            {
+                s_instance = this;
+            }
+
+            if (!PhotonNetwork.IsConnected)
+            {
+#if UNITY_EDITOR
+                PhotonNetwork.LogLevel = PunLogLevel.Full;
+                Application.runInBackground = true;
+#endif
+                PhotonNetwork.AuthValues = new AuthenticationValues();
+                PhotonNetwork.AuthValues.UserId = System.Guid.NewGuid().ToString(); // [CHANGED] 임의의 UserId 설정
+                PhotonNetwork.NickName = "Player_" + Random.Range(1000, 9999).ToString();
+                bool isConnected = PhotonNetwork.ConnectUsingSettings();
+                Debug.Assert(isConnected, $"[{nameof(PhotonManager)}] Photon 서버 연결 실패.");
+            }
+
+            DontDestroyOnLoad(gameObject);
+        }
+
+        public override void OnConnectedToMaster()
+        {
+            base.OnConnectedToMaster();
+
+            PhotonNetwork.AutomaticallySyncScene = true;
+            Debug.Log($"[{nameof(PhotonManager)}] 마스터 서버에 연결됨.");
+            PhotonNetwork.JoinLobby();
+        }
+
+        public override void OnJoinedLobby()
+        {
+            base.OnJoinedLobby();
+            Debug.Log($"[{nameof(PhotonManager)}] 로비에 가입됨.");
+        }
+
+        //[ADDED]
+        public override void OnDisconnected(DisconnectCause cause)
+        {
+            base.OnDisconnected(cause);
+            Debug.Log($"[PhotonManager] OnDisconnected 원인={cause}");
+
+            if (cause == DisconnectCause.DuplicateAuthentication)
+            {
+                // [ADDED] 재로그인 메시지 표시
+                Debug.LogWarning("재로그인 되었습니다. (동일 ID로 다른 PC에서 로그인)");
+                UI_ConfirmWindow cw = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+                cw.Show("재로그인 되었습니다.");
+            }
+        }
+    }
+}
+
+
+// --- PunAutoSyncMonoBehaviour.cs ---
+using ExitGames.Client.Photon;
+using Photon.Pun;
+using Photon.Realtime;
+using UnityEngine;
+
+namespace Practices.PhotonPunClient.Network
+{
+    /// <summary>
+    /// 레벨에 미리 배치해둬야하는 동기화필요한 NetworkObject 들은
+    /// PhotonNetwork.Instantiate 보다 단순 이벤트로 ViewID 만 동기화해주는것이 성능이 좋다. 
+    /// (이미 동일한 GameObject 들로 생성이 되어있기 때문에)
+    /// </summary>
+    [RequireComponent(typeof(PhotonView))]
+    public abstract class PunAutoSyncMonobehaviour : MonoBehaviour, IOnEventCallback
+    {
+        protected PhotonView photonView;
+
+        protected virtual void Awake()
+        {
+            photonView = GetComponent<PhotonView>();
+            SyncViewID();
+        }
+
+        protected virtual void OnEnable()
+        {
+            PhotonNetwork.AddCallbackTarget(this);
+        }
+
+        protected virtual void OnDisable()
+        {
+            PhotonNetwork.RemoveCallbackTarget(this);
+        }
+
+        void SyncViewID()
+        {
+            if (PhotonNetwork.IsMasterClient == false)
+                return;
+
+            if (photonView.Owner != null)
+                return;
+
+            if (PhotonNetwork.AllocateViewID(photonView))
+            {
+                object raiseEventContent = new object[]
+                {
+                    photonView.ViewID,
+                };
+
+                RaiseEventOptions raiseEventOption = new RaiseEventOptions
+                {
+                    Receivers = ReceiverGroup.Others,
+                };
+
+                PhotonNetwork.RaiseEvent(PhotonEventCode.SYNC_VIEW_ID,
+                                         raiseEventContent,
+                                         raiseEventOption,
+                                         SendOptions.SendReliable);
+            }
+            else
+            {
+                throw new System.Exception($"[{nameof(PunAutoSyncMonobehaviour)}] Failed to sync view id...");
+            }
+        }
+
+        public void OnEvent(EventData photonEvent)
+        {
+            byte eventCode = photonEvent.Code;
+
+            if (eventCode == PhotonEventCode.SYNC_VIEW_ID)
+                HandleSyncViewIdEvent(photonEvent);
+        }
+
+        void HandleSyncViewIdEvent(EventData photonEvent) 
+        {
+            object[] data = (object[])photonEvent.CustomData;
+            int viewId = (int)data[0];
+            photonView.ViewID = viewId;
+        }
+    }
+}
+
+// --- PlayerInputActions.cs ---
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was auto-generated by com.unity.inputsystem:InputActionCodeGenerator
+//     version 1.11.2
+//     from Assets/ParkourMultiGame/Scripts/PlayerInputs/PlayerInputActions.inputactions
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Utilities;
+
+namespace UnityEngine.InputSystem
+{
+    public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
+    {
+        public InputActionAsset asset { get; }
+        public @PlayerInputActions()
+        {
+            asset = InputActionAsset.FromJson(@"{
+    ""name"": ""PlayerInputActions"",
+    ""maps"": [
+        {
+            ""name"": ""Player"",
+            ""id"": ""df70fa95-8a34-4494-b137-73ab6b9c7d37"",
+            ""actions"": [
+                {
+                    ""name"": ""Move"",
+                    ""type"": ""Value"",
+                    ""id"": ""f3590470-77bc-48ee-b46d-d123f8e40da2"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""Jump"",
+                    ""type"": ""Button"",
+                    ""id"": ""c139c861-5361-4e80-910c-a4ee1a7435bb"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Climb"",
+                    ""type"": ""Button"",
+                    ""id"": ""308f6180-94f8-4e6e-a1fe-f72bfad41444"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": ""Keyboard"",
+                    ""id"": ""191926ee-4c28-4574-b84b-6e07b0a80c2a"",
+                    ""path"": ""2DVector"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Move"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""up"",
+                    ""id"": ""aa11d58d-eb97-43e3-a448-3d58d8e26662"",
+                    ""path"": ""<Keyboard>/w"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Move"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""down"",
+                    ""id"": ""b922ef05-0cc8-43f3-b721-d0f7ed482202"",
+                    ""path"": ""<Keyboard>/s"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Move"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""left"",
+                    ""id"": ""b243c1b7-30b4-4b47-bd87-4acd7743a72a"",
+                    ""path"": ""<Keyboard>/a"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Move"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""right"",
+                    ""id"": ""a3bc2025-5157-4586-ba0f-43b2465a7f93"",
+                    ""path"": ""<Keyboard>/d"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Move"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""4453792b-ad75-4ef5-90d6-d28c08536155"",
+                    ""path"": ""<Keyboard>/space"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Jump"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""281e5936-1693-43ae-b0ed-6eb9caf88363"",
+                    ""path"": ""<Keyboard>/e"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Climb"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                }
+            ]
+        },
+        {
+            ""name"": ""UI"",
+            ""id"": ""272f6d14-89ba-496f-b7ff-215263d3219f"",
+            ""actions"": [
+                {
+                    ""name"": ""Navigate"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""c95b2375-e6d9-4b88-9c4c-c5e76515df4b"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Submit"",
+                    ""type"": ""Button"",
+                    ""id"": ""7607c7b6-cd76-4816-beef-bd0341cfe950"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Cancel"",
+                    ""type"": ""Button"",
+                    ""id"": ""15cef263-9014-4fd5-94d9-4e4a6234a6ef"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Point"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""32b35790-4ed0-4e9a-aa41-69ac6d629449"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""Click"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""3c7022bf-7922-4f7c-a998-c437916075ad"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""ScrollWheel"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""0489e84a-4833-4c40-bfae-cea84b696689"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""MiddleClick"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""dad70c86-b58c-4b17-88ad-f5e53adf419e"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""RightClick"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""44b200b1-1557-4083-816c-b22cbdf77ddf"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""TrackedDevicePosition"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""24908448-c609-4bc3-a128-ea258674378a"",
+                    ""expectedControlType"": ""Vector3"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""TrackedDeviceOrientation"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""9caa3d8a-6b2f-4e8e-8bad-6ede561bd9be"",
+                    ""expectedControlType"": ""Quaternion"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Drag"",
+                    ""type"": ""PassThrough"",
+                    ""id"": ""d1d0c7bb-d33e-428c-9e4b-a86479a717b3"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": ""Gamepad"",
+                    ""id"": ""809f371f-c5e2-4e7a-83a1-d867598f40dd"",
+                    ""path"": ""2DVector"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""up"",
+                    ""id"": ""14a5d6e8-4aaf-4119-a9ef-34b8c2c548bf"",
+                    ""path"": ""<Gamepad>/leftStick/up"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""up"",
+                    ""id"": ""9144cbe6-05e1-4687-a6d7-24f99d23dd81"",
+                    ""path"": ""<Gamepad>/rightStick/up"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""down"",
+                    ""id"": ""2db08d65-c5fb-421b-983f-c71163608d67"",
+                    ""path"": ""<Gamepad>/leftStick/down"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""down"",
+                    ""id"": ""58748904-2ea9-4a80-8579-b500e6a76df8"",
+                    ""path"": ""<Gamepad>/rightStick/down"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""left"",
+                    ""id"": ""8ba04515-75aa-45de-966d-393d9bbd1c14"",
+                    ""path"": ""<Gamepad>/leftStick/left"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""left"",
+                    ""id"": ""712e721c-bdfb-4b23-a86c-a0d9fcfea921"",
+                    ""path"": ""<Gamepad>/rightStick/left"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""right"",
+                    ""id"": ""fcd248ae-a788-4676-a12e-f4d81205600b"",
+                    ""path"": ""<Gamepad>/leftStick/right"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""right"",
+                    ""id"": ""1f04d9bc-c50b-41a1-bfcc-afb75475ec20"",
+                    ""path"": ""<Gamepad>/rightStick/right"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""fb8277d4-c5cd-4663-9dc7-ee3f0b506d90"",
+                    ""path"": ""<Gamepad>/dpad"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Gamepad"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""Joystick"",
+                    ""id"": ""e25d9774-381c-4a61-b47c-7b6b299ad9f9"",
+                    ""path"": ""2DVector"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""up"",
+                    ""id"": ""3db53b26-6601-41be-9887-63ac74e79d19"",
+                    ""path"": ""<Joystick>/stick/up"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Joystick"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""down"",
+                    ""id"": ""0cb3e13e-3d90-4178-8ae6-d9c5501d653f"",
+                    ""path"": ""<Joystick>/stick/down"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Joystick"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""left"",
+                    ""id"": ""0392d399-f6dd-4c82-8062-c1e9c0d34835"",
+                    ""path"": ""<Joystick>/stick/left"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Joystick"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""right"",
+                    ""id"": ""942a66d9-d42f-43d6-8d70-ecb4ba5363bc"",
+                    ""path"": ""<Joystick>/stick/right"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Joystick"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""Keyboard"",
+                    ""id"": ""ff527021-f211-4c02-933e-5976594c46ed"",
+                    ""path"": ""2DVector"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""up"",
+                    ""id"": ""563fbfdd-0f09-408d-aa75-8642c4f08ef0"",
+                    ""path"": ""<Keyboard>/w"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""up"",
+                    ""id"": ""eb480147-c587-4a33-85ed-eb0ab9942c43"",
+                    ""path"": ""<Keyboard>/upArrow"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""down"",
+                    ""id"": ""2bf42165-60bc-42ca-8072-8c13ab40239b"",
+                    ""path"": ""<Keyboard>/s"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""down"",
+                    ""id"": ""85d264ad-e0a0-4565-b7ff-1a37edde51ac"",
+                    ""path"": ""<Keyboard>/downArrow"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""left"",
+                    ""id"": ""74214943-c580-44e4-98eb-ad7eebe17902"",
+                    ""path"": ""<Keyboard>/a"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""left"",
+                    ""id"": ""cea9b045-a000-445b-95b8-0c171af70a3b"",
+                    ""path"": ""<Keyboard>/leftArrow"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""right"",
+                    ""id"": ""8607c725-d935-4808-84b1-8354e29bab63"",
+                    ""path"": ""<Keyboard>/d"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""right"",
+                    ""id"": ""4cda81dc-9edd-4e03-9d7c-a71a14345d0b"",
+                    ""path"": ""<Keyboard>/rightArrow"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Navigate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""9e92bb26-7e3b-4ec4-b06b-3c8f8e498ddc"",
+                    ""path"": ""*/{Submit}"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse;Gamepad;Touch;Joystick;XR"",
+                    ""action"": ""Submit"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""82627dcc-3b13-4ba9-841d-e4b746d6553e"",
+                    ""path"": ""*/{Cancel}"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse;Gamepad;Touch;Joystick;XR"",
+                    ""action"": ""Cancel"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""c52c8e0b-8179-41d3-b8a1-d149033bbe86"",
+                    ""path"": ""<Mouse>/position"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Point"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""e1394cbc-336e-44ce-9ea8-6007ed6193f7"",
+                    ""path"": ""<Pen>/position"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse"",
+                    ""action"": ""Point"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""5693e57a-238a-46ed-b5ae-e64e6e574302"",
+                    ""path"": ""<Touchscreen>/touch*/position"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Touch"",
+                    ""action"": ""Point"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""4faf7dc9-b979-4210-aa8c-e808e1ef89f5"",
+                    ""path"": ""<Mouse>/leftButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""Click"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""8d66d5ba-88d7-48e6-b1cd-198bbfef7ace"",
+                    ""path"": ""<Pen>/tip"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""Click"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""47c2a644-3ebc-4dae-a106-589b7ca75b59"",
+                    ""path"": ""<Touchscreen>/touch*/press"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Touch"",
+                    ""action"": ""Click"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""bb9e6b34-44bf-4381-ac63-5aa15d19f677"",
+                    ""path"": ""<XRController>/trigger"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""XR"",
+                    ""action"": ""Click"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""38c99815-14ea-4617-8627-164d27641299"",
+                    ""path"": ""<Mouse>/scroll"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""ScrollWheel"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""24066f69-da47-44f3-a07e-0015fb02eb2e"",
+                    ""path"": ""<Mouse>/middleButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""MiddleClick"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""4c191405-5738-4d4b-a523-c6a301dbf754"",
+                    ""path"": ""<Mouse>/rightButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""RightClick"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""7236c0d9-6ca3-47cf-a6ee-a97f5b59ea77"",
+                    ""path"": ""<XRController>/devicePosition"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""XR"",
+                    ""action"": ""TrackedDevicePosition"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""23e01e3a-f935-4948-8d8b-9bcac77714fb"",
+                    ""path"": ""<XRController>/deviceRotation"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""XR"",
+                    ""action"": ""TrackedDeviceOrientation"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""One Modifier"",
+                    ""id"": ""98ca2ffa-b229-4e43-910b-e1892c4d0aa6"",
+                    ""path"": ""OneModifier"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Drag"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""modifier"",
+                    ""id"": ""6f94f351-be9c-401d-a4a5-5a3b4442a1e8"",
+                    ""path"": ""<Mouse>/leftButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Drag"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""binding"",
+                    ""id"": ""8648adf7-b4e2-4438-a6fd-50ee66fbff22"",
+                    ""path"": ""<Mouse>/delta"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Drag"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                }
+            ]
+        }
+    ],
+    ""controlSchemes"": [
+        {
+            ""name"": ""Keyboard&Mouse"",
+            ""bindingGroup"": ""Keyboard&Mouse"",
+            ""devices"": [
+                {
+                    ""devicePath"": ""<Keyboard>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                },
+                {
+                    ""devicePath"": ""<Mouse>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                }
+            ]
+        },
+        {
+            ""name"": ""Gamepad"",
+            ""bindingGroup"": ""Gamepad"",
+            ""devices"": [
+                {
+                    ""devicePath"": ""<Gamepad>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                }
+            ]
+        },
+        {
+            ""name"": ""Touch"",
+            ""bindingGroup"": ""Touch"",
+            ""devices"": [
+                {
+                    ""devicePath"": ""<Touchscreen>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                }
+            ]
+        },
+        {
+            ""name"": ""Joystick"",
+            ""bindingGroup"": ""Joystick"",
+            ""devices"": [
+                {
+                    ""devicePath"": ""<Joystick>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                }
+            ]
+        },
+        {
+            ""name"": ""XR"",
+            ""bindingGroup"": ""XR"",
+            ""devices"": [
+                {
+                    ""devicePath"": ""<XRController>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                }
+            ]
+        },
+        {
+            ""name"": ""Player"",
+            ""bindingGroup"": ""Player"",
+            ""devices"": [
+                {
+                    ""devicePath"": ""<Keyboard>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                },
+                {
+                    ""devicePath"": ""<Mouse>"",
+                    ""isOptional"": false,
+                    ""isOR"": false
+                }
+            ]
+        }
+    ]
+}");
+            // Player
+            m_Player = asset.FindActionMap("Player", throwIfNotFound: true);
+            m_Player_Move = m_Player.FindAction("Move", throwIfNotFound: true);
+            m_Player_Jump = m_Player.FindAction("Jump", throwIfNotFound: true);
+            m_Player_Climb = m_Player.FindAction("Climb", throwIfNotFound: true);
+            // UI
+            m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
+            m_UI_Navigate = m_UI.FindAction("Navigate", throwIfNotFound: true);
+            m_UI_Submit = m_UI.FindAction("Submit", throwIfNotFound: true);
+            m_UI_Cancel = m_UI.FindAction("Cancel", throwIfNotFound: true);
+            m_UI_Point = m_UI.FindAction("Point", throwIfNotFound: true);
+            m_UI_Click = m_UI.FindAction("Click", throwIfNotFound: true);
+            m_UI_ScrollWheel = m_UI.FindAction("ScrollWheel", throwIfNotFound: true);
+            m_UI_MiddleClick = m_UI.FindAction("MiddleClick", throwIfNotFound: true);
+            m_UI_RightClick = m_UI.FindAction("RightClick", throwIfNotFound: true);
+            m_UI_TrackedDevicePosition = m_UI.FindAction("TrackedDevicePosition", throwIfNotFound: true);
+            m_UI_TrackedDeviceOrientation = m_UI.FindAction("TrackedDeviceOrientation", throwIfNotFound: true);
+            m_UI_Drag = m_UI.FindAction("Drag", throwIfNotFound: true);
+        }
+
+        ~@PlayerInputActions()
+        {
+            UnityEngine.Debug.Assert(!m_Player.enabled, "This will cause a leak and performance issues, PlayerInputActions.Player.Disable() has not been called.");
+            UnityEngine.Debug.Assert(!m_UI.enabled, "This will cause a leak and performance issues, PlayerInputActions.UI.Disable() has not been called.");
+        }
+
+        public void Dispose()
+        {
+            UnityEngine.Object.Destroy(asset);
+        }
+
+        public InputBinding? bindingMask
+        {
+            get => asset.bindingMask;
+            set => asset.bindingMask = value;
+        }
+
+        public ReadOnlyArray<InputDevice>? devices
+        {
+            get => asset.devices;
+            set => asset.devices = value;
+        }
+
+        public ReadOnlyArray<InputControlScheme> controlSchemes => asset.controlSchemes;
+
+        public bool Contains(InputAction action)
+        {
+            return asset.Contains(action);
+        }
+
+        public IEnumerator<InputAction> GetEnumerator()
+        {
+            return asset.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        public void Enable()
+        {
+            asset.Enable();
+        }
+
+        public void Disable()
+        {
+            asset.Disable();
+        }
+
+        public IEnumerable<InputBinding> bindings => asset.bindings;
+
+        public InputAction FindAction(string actionNameOrId, bool throwIfNotFound = false)
+        {
+            return asset.FindAction(actionNameOrId, throwIfNotFound);
+        }
+
+        public int FindBinding(InputBinding bindingMask, out InputAction action)
+        {
+            return asset.FindBinding(bindingMask, out action);
+        }
+
+        // Player
+        private readonly InputActionMap m_Player;
+        private List<IPlayerActions> m_PlayerActionsCallbackInterfaces = new List<IPlayerActions>();
+        private readonly InputAction m_Player_Move;
+        private readonly InputAction m_Player_Jump;
+        private readonly InputAction m_Player_Climb;
+        public struct PlayerActions
+        {
+            private @PlayerInputActions m_Wrapper;
+            public PlayerActions(@PlayerInputActions wrapper) { m_Wrapper = wrapper; }
+            public InputAction @Move => m_Wrapper.m_Player_Move;
+            public InputAction @Jump => m_Wrapper.m_Player_Jump;
+            public InputAction @Climb => m_Wrapper.m_Player_Climb;
+            public InputActionMap Get() { return m_Wrapper.m_Player; }
+            public void Enable() { Get().Enable(); }
+            public void Disable() { Get().Disable(); }
+            public bool enabled => Get().enabled;
+            public static implicit operator InputActionMap(PlayerActions set) { return set.Get(); }
+            public void AddCallbacks(IPlayerActions instance)
+            {
+                if (instance == null || m_Wrapper.m_PlayerActionsCallbackInterfaces.Contains(instance)) return;
+                m_Wrapper.m_PlayerActionsCallbackInterfaces.Add(instance);
+                @Move.started += instance.OnMove;
+                @Move.performed += instance.OnMove;
+                @Move.canceled += instance.OnMove;
+                @Jump.started += instance.OnJump;
+                @Jump.performed += instance.OnJump;
+                @Jump.canceled += instance.OnJump;
+                @Climb.started += instance.OnClimb;
+                @Climb.performed += instance.OnClimb;
+                @Climb.canceled += instance.OnClimb;
+            }
+
+            private void UnregisterCallbacks(IPlayerActions instance)
+            {
+                @Move.started -= instance.OnMove;
+                @Move.performed -= instance.OnMove;
+                @Move.canceled -= instance.OnMove;
+                @Jump.started -= instance.OnJump;
+                @Jump.performed -= instance.OnJump;
+                @Jump.canceled -= instance.OnJump;
+                @Climb.started -= instance.OnClimb;
+                @Climb.performed -= instance.OnClimb;
+                @Climb.canceled -= instance.OnClimb;
+            }
+
+            public void RemoveCallbacks(IPlayerActions instance)
+            {
+                if (m_Wrapper.m_PlayerActionsCallbackInterfaces.Remove(instance))
+                    UnregisterCallbacks(instance);
+            }
+
+            public void SetCallbacks(IPlayerActions instance)
+            {
+                foreach (var item in m_Wrapper.m_PlayerActionsCallbackInterfaces)
+                    UnregisterCallbacks(item);
+                m_Wrapper.m_PlayerActionsCallbackInterfaces.Clear();
+                AddCallbacks(instance);
+            }
+        }
+        public PlayerActions @Player => new PlayerActions(this);
+
+        // UI
+        private readonly InputActionMap m_UI;
+        private List<IUIActions> m_UIActionsCallbackInterfaces = new List<IUIActions>();
+        private readonly InputAction m_UI_Navigate;
+        private readonly InputAction m_UI_Submit;
+        private readonly InputAction m_UI_Cancel;
+        private readonly InputAction m_UI_Point;
+        private readonly InputAction m_UI_Click;
+        private readonly InputAction m_UI_ScrollWheel;
+        private readonly InputAction m_UI_MiddleClick;
+        private readonly InputAction m_UI_RightClick;
+        private readonly InputAction m_UI_TrackedDevicePosition;
+        private readonly InputAction m_UI_TrackedDeviceOrientation;
+        private readonly InputAction m_UI_Drag;
+        public struct UIActions
+        {
+            private @PlayerInputActions m_Wrapper;
+            public UIActions(@PlayerInputActions wrapper) { m_Wrapper = wrapper; }
+            public InputAction @Navigate => m_Wrapper.m_UI_Navigate;
+            public InputAction @Submit => m_Wrapper.m_UI_Submit;
+            public InputAction @Cancel => m_Wrapper.m_UI_Cancel;
+            public InputAction @Point => m_Wrapper.m_UI_Point;
+            public InputAction @Click => m_Wrapper.m_UI_Click;
+            public InputAction @ScrollWheel => m_Wrapper.m_UI_ScrollWheel;
+            public InputAction @MiddleClick => m_Wrapper.m_UI_MiddleClick;
+            public InputAction @RightClick => m_Wrapper.m_UI_RightClick;
+            public InputAction @TrackedDevicePosition => m_Wrapper.m_UI_TrackedDevicePosition;
+            public InputAction @TrackedDeviceOrientation => m_Wrapper.m_UI_TrackedDeviceOrientation;
+            public InputAction @Drag => m_Wrapper.m_UI_Drag;
+            public InputActionMap Get() { return m_Wrapper.m_UI; }
+            public void Enable() { Get().Enable(); }
+            public void Disable() { Get().Disable(); }
+            public bool enabled => Get().enabled;
+            public static implicit operator InputActionMap(UIActions set) { return set.Get(); }
+            public void AddCallbacks(IUIActions instance)
+            {
+                if (instance == null || m_Wrapper.m_UIActionsCallbackInterfaces.Contains(instance)) return;
+                m_Wrapper.m_UIActionsCallbackInterfaces.Add(instance);
+                @Navigate.started += instance.OnNavigate;
+                @Navigate.performed += instance.OnNavigate;
+                @Navigate.canceled += instance.OnNavigate;
+                @Submit.started += instance.OnSubmit;
+                @Submit.performed += instance.OnSubmit;
+                @Submit.canceled += instance.OnSubmit;
+                @Cancel.started += instance.OnCancel;
+                @Cancel.performed += instance.OnCancel;
+                @Cancel.canceled += instance.OnCancel;
+                @Point.started += instance.OnPoint;
+                @Point.performed += instance.OnPoint;
+                @Point.canceled += instance.OnPoint;
+                @Click.started += instance.OnClick;
+                @Click.performed += instance.OnClick;
+                @Click.canceled += instance.OnClick;
+                @ScrollWheel.started += instance.OnScrollWheel;
+                @ScrollWheel.performed += instance.OnScrollWheel;
+                @ScrollWheel.canceled += instance.OnScrollWheel;
+                @MiddleClick.started += instance.OnMiddleClick;
+                @MiddleClick.performed += instance.OnMiddleClick;
+                @MiddleClick.canceled += instance.OnMiddleClick;
+                @RightClick.started += instance.OnRightClick;
+                @RightClick.performed += instance.OnRightClick;
+                @RightClick.canceled += instance.OnRightClick;
+                @TrackedDevicePosition.started += instance.OnTrackedDevicePosition;
+                @TrackedDevicePosition.performed += instance.OnTrackedDevicePosition;
+                @TrackedDevicePosition.canceled += instance.OnTrackedDevicePosition;
+                @TrackedDeviceOrientation.started += instance.OnTrackedDeviceOrientation;
+                @TrackedDeviceOrientation.performed += instance.OnTrackedDeviceOrientation;
+                @TrackedDeviceOrientation.canceled += instance.OnTrackedDeviceOrientation;
+                @Drag.started += instance.OnDrag;
+                @Drag.performed += instance.OnDrag;
+                @Drag.canceled += instance.OnDrag;
+            }
+
+            private void UnregisterCallbacks(IUIActions instance)
+            {
+                @Navigate.started -= instance.OnNavigate;
+                @Navigate.performed -= instance.OnNavigate;
+                @Navigate.canceled -= instance.OnNavigate;
+                @Submit.started -= instance.OnSubmit;
+                @Submit.performed -= instance.OnSubmit;
+                @Submit.canceled -= instance.OnSubmit;
+                @Cancel.started -= instance.OnCancel;
+                @Cancel.performed -= instance.OnCancel;
+                @Cancel.canceled -= instance.OnCancel;
+                @Point.started -= instance.OnPoint;
+                @Point.performed -= instance.OnPoint;
+                @Point.canceled -= instance.OnPoint;
+                @Click.started -= instance.OnClick;
+                @Click.performed -= instance.OnClick;
+                @Click.canceled -= instance.OnClick;
+                @ScrollWheel.started -= instance.OnScrollWheel;
+                @ScrollWheel.performed -= instance.OnScrollWheel;
+                @ScrollWheel.canceled -= instance.OnScrollWheel;
+                @MiddleClick.started -= instance.OnMiddleClick;
+                @MiddleClick.performed -= instance.OnMiddleClick;
+                @MiddleClick.canceled -= instance.OnMiddleClick;
+                @RightClick.started -= instance.OnRightClick;
+                @RightClick.performed -= instance.OnRightClick;
+                @RightClick.canceled -= instance.OnRightClick;
+                @TrackedDevicePosition.started -= instance.OnTrackedDevicePosition;
+                @TrackedDevicePosition.performed -= instance.OnTrackedDevicePosition;
+                @TrackedDevicePosition.canceled -= instance.OnTrackedDevicePosition;
+                @TrackedDeviceOrientation.started -= instance.OnTrackedDeviceOrientation;
+                @TrackedDeviceOrientation.performed -= instance.OnTrackedDeviceOrientation;
+                @TrackedDeviceOrientation.canceled -= instance.OnTrackedDeviceOrientation;
+                @Drag.started -= instance.OnDrag;
+                @Drag.performed -= instance.OnDrag;
+                @Drag.canceled -= instance.OnDrag;
+            }
+
+            public void RemoveCallbacks(IUIActions instance)
+            {
+                if (m_Wrapper.m_UIActionsCallbackInterfaces.Remove(instance))
+                    UnregisterCallbacks(instance);
+            }
+
+            public void SetCallbacks(IUIActions instance)
+            {
+                foreach (var item in m_Wrapper.m_UIActionsCallbackInterfaces)
+                    UnregisterCallbacks(item);
+                m_Wrapper.m_UIActionsCallbackInterfaces.Clear();
+                AddCallbacks(instance);
+            }
+        }
+        public UIActions @UI => new UIActions(this);
+        private int m_KeyboardMouseSchemeIndex = -1;
+        public InputControlScheme KeyboardMouseScheme
+        {
+            get
+            {
+                if (m_KeyboardMouseSchemeIndex == -1) m_KeyboardMouseSchemeIndex = asset.FindControlSchemeIndex("Keyboard&Mouse");
+                return asset.controlSchemes[m_KeyboardMouseSchemeIndex];
+            }
+        }
+        private int m_GamepadSchemeIndex = -1;
+        public InputControlScheme GamepadScheme
+        {
+            get
+            {
+                if (m_GamepadSchemeIndex == -1) m_GamepadSchemeIndex = asset.FindControlSchemeIndex("Gamepad");
+                return asset.controlSchemes[m_GamepadSchemeIndex];
+            }
+        }
+        private int m_TouchSchemeIndex = -1;
+        public InputControlScheme TouchScheme
+        {
+            get
+            {
+                if (m_TouchSchemeIndex == -1) m_TouchSchemeIndex = asset.FindControlSchemeIndex("Touch");
+                return asset.controlSchemes[m_TouchSchemeIndex];
+            }
+        }
+        private int m_JoystickSchemeIndex = -1;
+        public InputControlScheme JoystickScheme
+        {
+            get
+            {
+                if (m_JoystickSchemeIndex == -1) m_JoystickSchemeIndex = asset.FindControlSchemeIndex("Joystick");
+                return asset.controlSchemes[m_JoystickSchemeIndex];
+            }
+        }
+        private int m_XRSchemeIndex = -1;
+        public InputControlScheme XRScheme
+        {
+            get
+            {
+                if (m_XRSchemeIndex == -1) m_XRSchemeIndex = asset.FindControlSchemeIndex("XR");
+                return asset.controlSchemes[m_XRSchemeIndex];
+            }
+        }
+        private int m_PlayerSchemeIndex = -1;
+        public InputControlScheme PlayerScheme
+        {
+            get
+            {
+                if (m_PlayerSchemeIndex == -1) m_PlayerSchemeIndex = asset.FindControlSchemeIndex("Player");
+                return asset.controlSchemes[m_PlayerSchemeIndex];
+            }
+        }
+        public interface IPlayerActions
+        {
+            void OnMove(InputAction.CallbackContext context);
+            void OnJump(InputAction.CallbackContext context);
+            void OnClimb(InputAction.CallbackContext context);
+        }
+        public interface IUIActions
+        {
+            void OnNavigate(InputAction.CallbackContext context);
+            void OnSubmit(InputAction.CallbackContext context);
+            void OnCancel(InputAction.CallbackContext context);
+            void OnPoint(InputAction.CallbackContext context);
+            void OnClick(InputAction.CallbackContext context);
+            void OnScrollWheel(InputAction.CallbackContext context);
+            void OnMiddleClick(InputAction.CallbackContext context);
+            void OnRightClick(InputAction.CallbackContext context);
+            void OnTrackedDevicePosition(InputAction.CallbackContext context);
+            void OnTrackedDeviceOrientation(InputAction.CallbackContext context);
+            void OnDrag(InputAction.CallbackContext context);
+        }
+    }
+}
+
+
+// --- Singleton`1.cs ---
+using System;
+using System.Reflection;
+
+namespace Practices.UGUI_Management.Singletons
+{
+    /// <summary>
+    /// Singleton base
+    /// </summary>
+    /// <typeparam name="T"> 싱글톤으로 사용하려는 타입 (상속클래스) </typeparam>
+    public abstract class Singleton<T>
+        where T : Singleton<T>
+    {
+        public static T instance
+        {
+            get
+            {
+                if (s_instance == null)
+                {
+                    //ConstructorInfo constructorInfo = typeof(T).GetConstructor(new Type[] { });
+                    //s_instance = (T)constructorInfo.Invoke(null);
+
+                    s_instance = (T)Activator.CreateInstance(typeof(T));
+                }
+
+                return s_instance;
+            }
+        }
+
+
+        private static T s_instance;
+    }
+}
+
+// --- DraggablePanel.cs ---
+using UnityEngine;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class DraggablePanel : MonoBehaviour
+    {
+    }
+}
+
+// --- UI_Equipments.cs ---
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Equipments : UI_Popup
+    {
+    }
+}
+
+// --- UI_Inventory.cs ---
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Inventory : UI_Popup
+    {
+        protected override void Start()
+        {
+            base.Start();
+
+            playerInputActions.UI.Click.performed += OnClick;
+        }
+
+        private void OnClick(InputAction.CallbackContext context)
+        {
+            if (TryGraphicRaycast(Mouse.current.position.ReadValue(), out CanvasRenderer renderer))
+            {
+                UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+                confirmWindow.Show("아직 인벤토리 구현된 사항 없음");
+            }
+        }
+    }
+}
+
+// --- UI_UGUIManagementExampleScreen.cs ---
+using UnityEngine;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_UGUIManagementExampleScreen : UI_Screen
+    {
+    }
+}
+
+// --- GameTimerUI.cs ---
+// [ADDED FILE] GameTimerUI.cs
+// Canvas + TMP_Text 오브젝트에 연결 후, _timerText에 참조
+using Photon.Pun;
+using UnityEngine;
+using TMPro;
+
+public class GameTimerUI : MonoBehaviourPun
+{
+    [SerializeField] TMP_Text _timerText;
+
+    double _startTime;
+
+    void Start()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            _startTime = PhotonNetwork.Time;
+            photonView.RPC(nameof(SyncStartTime), RpcTarget.Others, _startTime);
+        }
+    }
+
+    [PunRPC]
+    void SyncStartTime(double t)
+    {
+        _startTime = t;
+    }
+
+    void Update()
+    {
+        if (_startTime > 0)
+        {
+            double elapsed = PhotonNetwork.Time - _startTime;
+            _timerText.text = $"Time: {elapsed:F2}";
+        }
+    }
+}
+
+// --- LobbyGameManager.cs ---
+using Photon.Pun;    // [ADDED] Photon
+using Photon.Realtime;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class LobbyGameManager : MonoBehaviourPunCallbacks
+{
+    // [CHANGED] 씬에 배치된 "로비 카메라"와 "로비 UI"를 참조
+    [Header("Lobby Objects")]
+    [SerializeField] private Camera lobbyCamera = null;    // 씬에 있는 카메라(메인 카메라 역할)
+    [SerializeField] private Canvas lobbyCanvas = null;    // 로비 UI (방 목록, 버튼 등등)
+
+    [Header("UI Buttons")]
+    [SerializeField] private Button startGameButton = null; // "게임시작" 버튼
+
+    [Header("Photon Settings")]
+    [SerializeField] private string characterPrefabName = "Archer";
+    // Resources/Characters/Archer 등 실제 경로 맞게 설정
+
+    private bool isGameStarted = false;  // 로비 vs 게임 상태 판단용
+
+    private void Start()
+    {
+        // [CHANGED] 로비 상태 초기화
+        isGameStarted = false;
+
+        // 로비카메라, 로비Canvas 켜기
+        if (lobbyCamera) lobbyCamera.gameObject.SetActive(true);
+        if (lobbyCanvas) lobbyCanvas.gameObject.SetActive(true);
+
+        // 게임 시작 버튼 리스너
+        if (startGameButton)
+        {
+            startGameButton.onClick.AddListener(OnClickStartGame);
+        }
+    }
+
+    // [CHANGED] "StartGame" 버튼 클릭 시 호출
+    private void OnClickStartGame()
+    {
+        if (isGameStarted) return;
+
+        isGameStarted = true;
+
+        // 로비 카메라와 UI 끄기
+        if (lobbyCamera) lobbyCamera.gameObject.SetActive(false);
+        if (lobbyCanvas) lobbyCanvas.gameObject.SetActive(false);
+
+        // PhotonNetwork.Instantiate를 통해 캐릭터 생성
+        // 실제로는 Vector3, Quaternion값을 원하는 스폰 위치/회전으로 조정
+        Vector3 spawnPos = new Vector3(Random.Range(-3f, 3f), 0f, Random.Range(-3f, 3f));
+        Quaternion spawnRot = Quaternion.identity;
+
+        PhotonNetwork.Instantiate(characterPrefabName, spawnPos, spawnRot);
+        // => 캐릭터 프리팹에 카메라가 들어있고, photonView.IsMine == true인 오브젝트만
+        //    카메라.enabled = true 등으로 로컬 시점을 갖게 됨
+    }
+
+    // [CHANGED] Photon 콜백 (예: 다른 유저가 나갔을 때 등)
+    public override void OnPlayerLeftRoom(Player otherPlayer)
+    {
+        base.OnPlayerLeftRoom(otherPlayer);
+        Debug.Log($"[LobbyGameManager] Player left: {otherPlayer.NickName}");
+    }
+
+    // [CHANGED] Optional: 게임이 끝나고 로비로 복귀하는 로직
+    // 하나의 씬에서 로비로 돌아가려면?
+    public void ReturnToLobby()
+    {
+        // 캐릭터, 게임오브젝트 정리
+        // PhotonNetwork.Destroy(??) 등...
+
+        isGameStarted = false;
+
+        // 로비카메라, 로비UI 다시 켜기
+        if (lobbyCamera) lobbyCamera.gameObject.SetActive(true);
+        if (lobbyCanvas) lobbyCanvas.gameObject.SetActive(true);
+    }
+}
+
+
+// --- RoomListSlot.cs ---
+using UnityEngine;
+using Practices.UGUI_Management.UI;
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class RoomListSlot : ComponentResolvingBehaviour
+    {
+        public bool isSelected
+        {
+            get => _isSelectedValue;
+            set
+            {
+                _isSelectedValue = value;
+                _isSelected.gameObject.SetActive(value);
+            }
+        }
+
+        public int roomId
+        {
+            get => _roomIdValue;
+            set
+            {
+                _roomIdValue = value;
+                _roomId.text = value.ToString();
+            }
+        }
+
+        public string roomName
+        {
+            get => _roomNameValue;
+            set
+            {
+                _roomNameValue = value;
+                _roomName.text = value.ToString();
+            }
+        }
+
+        public int roomPlayerCount
+        {
+            get => _roomPlayerCountValue;
+            set
+            {
+                _roomPlayerCountValue = value;
+                _roomPlayerCount.text = value.ToString();
+            }
+        }
+
+        public int roomMaxPlayers
+        {
+            get => _roomMaxPlayersValue;
+            set
+            {
+                _roomMaxPlayersValue = value;
+                _roomMaxPlayers.text = value.ToString();
+            }
+        }
+
+        bool _isSelectedValue;
+        int _roomIdValue;
+        string _roomNameValue;
+        int _roomPlayerCountValue;
+        int _roomMaxPlayersValue;
+        [Resolve] Image _isSelected;
+        [Resolve] TMP_Text _roomId;
+        [Resolve] TMP_Text _roomName;
+        [Resolve] TMP_Text _roomPlayerCount;
+        [Resolve] TMP_Text _roomMaxPlayers;
+    }
+}
+
+// --- RoomPlayerInfoSlot.cs ---
+using UnityEngine;
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class RoomPlayerInfoSlot : ComponentResolvingBehaviour
+    {
+        public int actorNumber { get; set; }
+
+        public bool isReady
+        {
+            get => _isReadyValue;
+            set
+            {
+                _isReadyValue = value;
+                _isReady.gameObject.SetActive(value);
+            }
+        }
+
+        public string playerName
+        {
+            get => _playerNameValue;
+            set
+            {
+                _playerNameValue = value;
+                _playerName.text = value;
+            }
+        }
+
+        public bool isMasterClient
+        {
+            get => _isMasterClientValue;
+            set
+            {
+                _isMasterClientValue = value;
+                _isMasterClient.gameObject.SetActive(value);
+            }
+        }
+
+        //[ADDED] Show selected character icon
+        public void SetCharacterImage(string characterName)
+        {
+            if (_characterImage == null) return;
+            // Example: "CharacterImages/Archer"
+            Sprite sp = Resources.Load<Sprite>($"CharacterImages/{characterName}");
+            if (sp != null)
+            {
+                _characterImage.sprite = sp;
+            }
+        }
+
+        bool _isReadyValue;
+        string _playerNameValue;
+        bool _isMasterClientValue;
+
+        [Resolve] TMP_Text _isReady;
+        [Resolve] TMP_Text _playerName;
+        [Resolve] Image _isMasterClient;
+
+        [Resolve] Image _characterImage; // [ADDED] "Image - CharacterImage" in child
+    }
+}
+
+
+/*using UnityEngine;
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class RoomPlayerInfoSlot : ComponentResolvingBehaviour
+    {
+        public int actorNumber { get; set; }
+
+        public bool isReady
+        {
+            get => _isReadyValue;
+            set
+            {
+                _isReadyValue = value;
+                _isReady.gameObject.SetActive(value);
+            }
+        }
+
+        public string playerName
+        {
+            get => _playerNameValue;
+            set
+            {
+                _playerName.text = value;
+            }
+        }
+
+        public bool isMasterClient
+        {
+            get => _isMasterClientValue;
+            set
+            {
+                _isMasterClientValue = value;
+                _isMasterClient.gameObject.SetActive(value);
+            }
+        }
+
+
+        bool _isReadyValue;
+        string _playerNameValue;
+        bool _isMasterClientValue;
+        [Resolve] TMP_Text _isReady;
+        [Resolve] TMP_Text _playerName;
+        [Resolve] Image _isMasterClient;
+    }
+}*/
+
+// --- SettingsManager.cs ---
+using UnityEngine;
+using UnityEngine.UI;
+
+public class SettingsManager : MonoBehaviour
+{
+    // 설정창 Canvas (비활성화/활성화할 대상)
+    [SerializeField] private GameObject canvasSettings;
+
+    // 로비에서 설정창을 여는 버튼
+    [SerializeField] private Button optionsButton;
+
+    // 설정창에서 설정을 닫는 버튼
+    [SerializeField] private Button confirmButton;
+
+    // 게임을 종료하는 Exit 버튼
+    [SerializeField] private Button exitButton;
+
+    private void Start()
+    {
+        // 설정창을 처음에는 비활성화 상태로 설정
+        if (canvasSettings != null)
+            canvasSettings.SetActive(false);
+        else
+            Debug.LogError("Canvas Settings가 연결되지 않았습니다!");
+
+        // 옵션 버튼 클릭 시 설정창 토글
+        if (optionsButton != null)
+            optionsButton.onClick.AddListener(ToggleSettings);
+        else
+            Debug.LogError("Options Button이 연결되지 않았습니다!");
+
+        // 확인 버튼 클릭 시 설정창 닫기
+        if (confirmButton != null)
+            confirmButton.onClick.AddListener(ToggleSettings);
+        else
+            Debug.LogError("Confirm Button이 연결되지 않았습니다!");
+
+        // Exit 버튼 클릭 시 게임 종료
+        if (exitButton != null)
+            exitButton.onClick.AddListener(ExitGame);
+        else
+            Debug.LogError("Exit Button이 연결되지 않았습니다!");
+    }
+
+    /// <summary>
+    /// 설정창의 활성화/비활성화 상태를 토글합니다.
+    /// </summary>
+    private void ToggleSettings()
+    {
+        if (canvasSettings != null)
+        {
+            // 현재 상태 반대로 토글
+            bool isActive = canvasSettings.activeSelf;
+            canvasSettings.SetActive(!isActive);
+        }
+        else
+        {
+            Debug.LogError("Canvas Settings가 설정되지 않았습니다!");
+        }
+    }
+
+    /// <summary>
+    /// 게임을 종료합니다.
+    /// </summary>
+    private void ExitGame()
+    {
+        Debug.Log("게임 종료 버튼이 눌렸습니다!");
+
+#if UNITY_EDITOR
+        // 에디터에서 실행 중인 경우 플레이 모드를 중지
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        // 빌드된 게임에서 프로그램 종료
+        Application.Quit();
+#endif
+    }
+}
+
+
+// --- UI_Base.cs ---
+// --- UI_Base.cs ---
+using Practices.UGUI_Management.Utilities;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.UI
+{
+    [RequireComponent(typeof(Canvas))]
+    public abstract class UI_Base : ComponentResolvingBehaviour
+    {
+        public int sortingOrder
+        {
+            get => _canvas ? _canvas.sortingOrder : 0;  // [ADDED] null 체크
+            set { if (_canvas) _canvas.sortingOrder = value; }
+        }
+
+        public bool inputActionsEnabled
+        {
+            get => playerInputActions.asset.enabled;
+            set
+            {
+                if (value)
+                    playerInputActions.Enable();
+                else
+                    playerInputActions.Disable();
+            }
+        }
+
+        protected UI_Manager manager;
+        protected PlayerInputActions playerInputActions;
+        Canvas _canvas;
+        GraphicRaycaster _graphicRaycaster;
+        EventSystem _eventSystem;
+        PointerEventData _pointerEventData;
+        List<RaycastResult> _raycastResultBuffer;
+
+        public event Action onShow;
+        public event Action onHide;
+
+        protected override void Awake()
+        {
+            base.Awake();
+
+            _canvas = GetComponent<Canvas>();
+            _graphicRaycaster = GetComponent<GraphicRaycaster>();
+            _eventSystem = EventSystem.current;
+            _pointerEventData = new PointerEventData(_eventSystem);
+            _raycastResultBuffer = new List<RaycastResult>(1);
+
+            playerInputActions = new PlayerInputActions();
+            manager = UI_Manager.instance;
+            manager.Register(this);
+        }
+
+        protected virtual void Start() { }
+
+        // [ADDED] null 체크
+        public virtual void Show()
+        {
+            if (!this || !_canvas) // 이미 Destroy되었거나, Canvas가 null
+            {
+                Debug.LogWarning($"[UI_Base] Attempted Show(), but is destroyed or _canvas is null. name={name}");
+                return;
+            }
+
+            _canvas.enabled = true;
+            onShow?.Invoke();
+        }
+
+        // [ADDED] null 체크
+        public virtual void Hide()
+        {
+            if (!this || !_canvas) // 이미 Destroy되었거나 Null
+            {
+                Debug.LogWarning($"[UI_Base] Canvas is null or destroyed! Cannot Hide {name}");
+                return;
+            }
+
+            _canvas.enabled = false;
+            onHide?.Invoke();
+        }
+
+        private void OnDestroy()
+        {
+            onHide?.Invoke();
+            manager.Unregister(this);
+        }
+
+        public bool TryGraphicRaycast<T>(Vector2 pointerPosition, out T result)
+            where T : Component
+        {
+            if (!_graphicRaycaster)
+            {
+                result = default;
+                return false;
+            }
+
+            _pointerEventData.position = pointerPosition;
+            _raycastResultBuffer.Clear();
+            _graphicRaycaster.Raycast(_pointerEventData, _raycastResultBuffer);
+
+            if (_raycastResultBuffer.Count > 0)
+            {
+                if (_raycastResultBuffer[0].gameObject.TryGetComponent(out result))
+                    return true;
+            }
+
+            result = default;
+            return false;
+        }
+    }
+}
+
+
+
+
+/*// [ADDED]250116V1
+using Practices.UGUI_Management.Utilities;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.UI
+{
+    [RequireComponent(typeof(Canvas))]
+    public abstract class UI_Base : ComponentResolvingBehaviour
+    {
+        public int sortingOrder
+        {
+            get => _canvas.sortingOrder;
+            set => _canvas.sortingOrder = value;
+        }
+
+        public bool inputActionsEnabled
+        {
+            get => playerInputActions.asset.enabled;
+            set
+            {
+                if (value)
+                    playerInputActions.Enable();
+                else
+                    playerInputActions.Disable();
+            }
+        }
+
+        protected UI_Manager manager;
+        protected PlayerInputActions playerInputActions;
+        Canvas _canvas;
+        GraphicRaycaster _graphicRaycaster;
+        EventSystem _eventSystem;
+        PointerEventData _pointerEventData;
+        List<RaycastResult> _raycastResultBuffer;
+
+        public event Action onShow;
+        public event Action onHide;
+
+
+        protected override void Awake()
+        {
+            base.Awake();
+
+            _canvas = GetComponent<Canvas>();
+            _graphicRaycaster = GetComponent<GraphicRaycaster>();
+            _eventSystem = EventSystem.current;
+            _pointerEventData = new PointerEventData(_eventSystem);
+            _raycastResultBuffer = new List<RaycastResult>(1);
+            playerInputActions = new PlayerInputActions();
+            manager = UI_Manager.instance;
+            manager.Register(this);
+        }
+
+        protected virtual void Start() { }
+
+        public virtual void Show()
+        {
+            _canvas.enabled = true;
+            onShow?.Invoke();
+        }
+
+        public virtual void Hide()
+        {
+            _canvas.enabled = false;
+            onHide?.Invoke();
+        }
+
+        /// <summary>
+        /// 현재 Canvas 에 특정 컴포넌트가 존재하는지 탐색
+        /// </summary>
+        /// <typeparam name="T"> 탐색하고싶은 컴포넌트 타입 </typeparam>
+        /// <param name="pointerPosition"> 탐색하고싶은 위치 </param>
+        /// <param name="result"> 탐색 반환결과 </param>
+        /// <returns> 탐색 성공여부 </returns>
+        public bool TryGraphicRaycast<T>(Vector2 pointerPosition, out T result)
+            where T : Component
+        {
+            _pointerEventData.position = pointerPosition;
+            _raycastResultBuffer.Clear();
+            _graphicRaycaster.Raycast(_pointerEventData, _raycastResultBuffer);
+
+            if (_raycastResultBuffer.Count > 0)
+            {
+                if (_raycastResultBuffer[0].gameObject.TryGetComponent(out result))
+                    return true;
+            }
+
+            result = default;
+            return false;
+        }
+    }
+}*/
+
+// --- UI_CharacterSelect.cs ---
+// [ADDED FILE] UI_CharacterSelect.cs
+using Photon.Pun;
+using Photon.Realtime;
+using Practices.UGUI_Management.UI;
+using System;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class UI_CharacterSelect : UI_Popup // [ADDED] UI_Popup 상속(혹은 UI_Base)
+    {
+        [SerializeField] private Button[] _characterButtons;
+        // 인스펙터에서 8개 버튼 등록 (ArcherBtn, ClericBtn, ...)
+
+        // [CHANGED] 
+        [SerializeField] private Image[] _buttonImages; // [ADDED] 혹은 버튼 컴포넌트에서 .image를 가져올 수도 있음  // 8개의 캐릭터 버튼이 각각 어떤 Sprite를 가지고 있는지 확인
+        public event Action<Sprite> onCharacterSelected; // [ADDED] 선택된 캐릭터 이미지를 외부에 알림
+
+        private readonly string[] _characterNames =
+        {
+            "Archer",
+            "Cleric",
+            "Gunner",
+            "Knight",
+            "Mage",
+            "Ninja",
+            "Rogue",
+            "Warrior"
+        };
+
+        protected override void Start()
+        {
+            base.Start();
+
+            for (int i = 0; i < _characterButtons.Length; i++)
+            {
+                int idx = i; // capture
+                _characterButtons[i].onClick.AddListener(() => OnClickCharacter(idx));
+            }
+        }
+
+        private void OnClickCharacter(int idx)
+        {
+            if (idx < 0 || idx >= _characterNames.Length) return;
+
+            string selected = _characterNames[idx];
+
+            // [ADDED] Photon CustomProperties 저장
+            var props = new ExitGames.Client.Photon.Hashtable
+            {
+                { "SelectedCharacter", selected }
+            };
+            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+
+            Debug.Log($"[UI_CharacterSelect] Selected Character = {selected}");
+
+            // [ADDED] 해당 캐릭터 Sprite를 가져온다.
+            Sprite selectedSprite = _buttonImages[idx].sprite;
+
+            // 팝업 외부에서 이 이벤트를 구독하면, 이미지 표시 가능
+            onCharacterSelected?.Invoke(selectedSprite);
+
+            // [CHANGED] 팝업 닫기
+            Hide();
+        }
+    }
+}
+
+
+// --- UI_ConfirmWindow.cs ---
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_ConfirmWindow : UI_Popup
+    {
+        [Resolve] TMP_Text _message;
+        [Resolve] Button _confirm;
+
+        public void Show(string message, UnityAction onConfirmed = null)
+        {
+            // [ADDED] �켱, �̹� �ı��Ǿ�����(=this == null) Ȥ�� Canvas�� ����ִ��� �˻�
+            if (this == null)
+            {
+                Debug.LogWarning("[UI_ConfirmWindow] Attempting to Show(), but this is null/destroyed.");
+                return;
+            }
+
+            // base.Show() ���ο��� _canvas.enabled = true; ���� ȣ��
+            // base.Show() ȣ�� ��, canvas�� �����ϴ��� üũ( UI_Base ������ �ʿ��� ���� )
+            // �Ʒ�ó�� UI_Popup, UI_Base �ʿ��� null-check �� ���� �ֽ��ϴ�.
+
+            base.Show(); // <-- ���� ���⼭ MissingReference�� ��ٸ�, UI_Base�� UI_Popup���� canvas null üũ �ʿ�.
+
+            if (this == null)
+            {
+                Debug.LogWarning("[UI_ConfirmWindow] After base.Show(), this is destroyed?");
+                return;
+            }
+
+            if (_message == null || _confirm == null)
+            {
+                Debug.LogWarning("[UI_ConfirmWindow] _message or _confirm is null. Possibly destroyed?");
+                return;
+            }
+
+            _message.text = message;
+            _confirm.onClick.RemoveAllListeners();
+            _confirm.onClick.AddListener(Hide);
+
+            if (onConfirmed != null)
+                _confirm.onClick.AddListener(onConfirmed);
+        }
+    }
+}
+
+
+
+
+/* //240116-V1
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_ConfirmWindow : UI_Popup
+    {
+        [Resolve] TMP_Text _message;
+        [Resolve] Button _confirm;
+
+
+        public void Show(string message, UnityAction onConfirmed = null)
+        {
+            base.Show();
+
+            _message.text = message;
+            _confirm.onClick.RemoveAllListeners();
+            _confirm.onClick.AddListener(Hide);
+
+            if (onConfirmed != null) 
+                _confirm.onClick.AddListener(onConfirmed);
+        }
+    }
+}*/
+
+// --- UI_CreateRoomOption.cs ---
+using Photon.Pun;
+using Photon.Realtime;
+using Practices.UGUI_Management.UI;
+using Practices.UGUI_Management.Utilities;
+using TMPro;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class UI_CreateRoomOption : UI_Popup
+    {
+        [Resolve] TMP_InputField _roomName;
+        [Resolve] TMP_InputField _roomMaxPlayers;
+        [Resolve] Button _confirm;
+        [Resolve] Button _cancel;
+
+        const int ROOM_MAX_PLAYERS_LIMIT_MAX = 8;
+        const int ROOM_MAX_PLAYERS_LIMIT_MIN = 2;
+
+
+        protected override void Start()
+        {
+            base.Start();
+
+            _roomMaxPlayers.onValueChanged.AddListener(value =>
+            {
+                if (int.TryParse(value, out int parsed))
+                {
+                    if (parsed > ROOM_MAX_PLAYERS_LIMIT_MAX)
+                        _roomMaxPlayers.SetTextWithoutNotify(ROOM_MAX_PLAYERS_LIMIT_MAX.ToString()); // text property에 쓰면 무한루프걸림.
+                    if (parsed < ROOM_MAX_PLAYERS_LIMIT_MIN)
+                        _roomMaxPlayers.SetTextWithoutNotify(ROOM_MAX_PLAYERS_LIMIT_MIN.ToString()); // text property에 쓰면 무한루프걸림.
+                }
+                else
+                {
+                    _roomMaxPlayers.SetTextWithoutNotify(ROOM_MAX_PLAYERS_LIMIT_MIN.ToString());
+                }
+            });
+
+            _confirm.onClick.AddListener(() =>
+            {
+                RoomOptions roomOptions = new RoomOptions();
+                roomOptions.MaxPlayers = int.Parse(_roomMaxPlayers.text);
+                PhotonNetwork.CreateRoom(_roomName.text, roomOptions);
+                Hide();
+            });
+
+            _cancel.onClick.AddListener(Hide);
+        }
+
+        public override void Show()
+        {
+            base.Show();
+
+            _roomName.text = string.Empty;
+            _roomMaxPlayers.text = ROOM_MAX_PLAYERS_LIMIT_MIN.ToString();
+        }
+    }
+}
+
+// --- UI_ExitGame.cs ---
+using Photon.Pun;
+using Practices.UGUI_Management.UI;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    // Photon 콜백 사용을 위해 MonoBehaviourPunCallbacks 상속
+    public class UI_ExitGame : MonoBehaviourPunCallbacks
+    {
+        [SerializeField] private Button _exitButton;
+        // Button을 Inspector에서 참조할 수 있도록 SerializeField
+
+        private void Start()
+        {
+            // 버튼이 누락되지 않았는지 체크
+            if (_exitButton == null)
+            {
+                Debug.LogError($"[{nameof(UI_ExitGame)}] _exitButton is not assigned!");
+                return;
+            }
+
+            // onClick 에 메서드 바인딩
+            _exitButton.onClick.AddListener(OnClickExitGame);
+        }
+
+        /// <summary>
+        /// 종료 버튼 클릭 시 호출
+        /// </summary>
+        private void OnClickExitGame()
+        {
+            // Photon 방을 떠나는 로직
+            // 방에서 나가면 OnLeftRoom 콜백이 자동 호출됩니다.
+            PhotonNetwork.LeaveRoom();
+        }
+
+        /// <summary>
+        /// Photon 룸을 떠난 뒤에 호출되는 콜백
+        /// </summary>
+        public override void OnLeftRoom()
+        {
+            base.OnLeftRoom();
+
+            // Lobby 씬으로 돌아가거나, 원하는 씬으로 이동
+            SceneManager.LoadScene("Lobby");
+        }
+    }
+}
+
+
+// --- UI_Lobby.cs ---
+using Photon.Pun;
+using Photon.Realtime;
+using Practices.UGUI_Management.UI;
+using Practices.UGUI_Management.Utilities;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using ExitGames.Client.Photon;
+using System.Linq;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class UI_Lobby : UI_Screen, ILobbyCallbacks, IMatchmakingCallbacks
+    {
+        [Resolve] RectTransform _roomListSlotContent;
+        [Resolve] RoomListSlot _roomListSlot;
+        [Resolve] Button _createRoom;
+        [Resolve] Button _joinRoom;
+        List<RoomListSlot> _roomListSlots = new List<RoomListSlot>(10);
+        List<RoomInfo> _roomInfosCached = new List<RoomInfo>(10);
+        int _roomIdSelected = -1;
+
+        [Resolve] private Button _openCharacterSelectButton;
+        [Resolve] private Image _selectedCharacterImage;
+
+        private const string DEFAULT_CHARACTER = "Warrior"; //[ADDED] fallback
+
+        protected override void Start()
+        {
+            base.Start();
+
+            _roomListSlot.gameObject.SetActive(false);
+            playerInputActions.UI.Click.performed += OnClick;
+
+            _createRoom.onClick.AddListener(() =>
+            {
+                UI_CreateRoomOption createRoomOption = UI_Manager.instance.Resolve<UI_CreateRoomOption>();
+                createRoomOption.Show();
+            });
+
+            _joinRoom.interactable = false;
+            _joinRoom.onClick.AddListener(() =>
+            {
+                UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+                RoomInfo roomInfo = _roomInfosCached[_roomIdSelected];
+
+                if (!roomInfo.IsOpen)
+                {
+                    confirmWindow.Show("The room is closed.");
+                    return;
+                }
+
+                if (roomInfo.PlayerCount >= roomInfo.MaxPlayers)
+                {
+                    confirmWindow.Show("The room is full.");
+                    return;
+                }
+
+                PhotonNetwork.JoinRoom(roomInfo.Name);
+            });
+
+            // [ADDED] Character Select
+            _openCharacterSelectButton.onClick.AddListener(() =>
+            {
+                UI_CharacterSelect popup = UI_Manager.instance.Resolve<UI_CharacterSelect>();
+                popup.onCharacterSelected += OnCharacterSelected;
+                popup.Show();
+            });
+
+            // [ADDED] If user didn't choose any character yet, assign default
+            object existingChar;
+            if (!PhotonNetwork.LocalPlayer.CustomProperties.TryGetValue("SelectedCharacter", out existingChar))
+            {
+                // Set a default
+                PhotonNetwork.LocalPlayer.SetCustomProperties(new ExitGames.Client.Photon.Hashtable
+                {
+                    { "SelectedCharacter", DEFAULT_CHARACTER }
+                });
+                // Also show in UI
+                _selectedCharacterImage.sprite = Resources.Load<Sprite>($"CharacterImages/{DEFAULT_CHARACTER}");
+            }
+            else
+            {
+                // If there was a chosen character, show that sprite
+                string charName = (string)existingChar;
+                _selectedCharacterImage.sprite = Resources.Load<Sprite>($"CharacterImages/{charName}");
+            }
+        }
+
+        private void OnClick(InputAction.CallbackContext context)
+        {
+            if (TryGraphicRaycast(Mouse.current.position.ReadValue(), out RoomListSlot slot))
+            {
+                SelectRoom(slot.roomId);
+            }
+        }
+
+        private void SelectRoom(int roomId)
+        {
+            RoomInfo roomInfo = _roomInfosCached[roomId];
+            if (!roomInfo.IsOpen || roomInfo.PlayerCount >= roomInfo.MaxPlayers)
+            {
+                _joinRoom.interactable = false;
+                return;
+            }
+
+            _joinRoom.interactable = true;
+            if (_roomIdSelected >= 0)
+            {
+                _roomListSlots[_roomIdSelected].isSelected = false;
+            }
+            _roomListSlots[roomId].isSelected = true;
+            _roomIdSelected = roomId;
+        }
+
+        // [ADDED] Callback from UI_CharacterSelect when user picks a character
+        private void OnCharacterSelected(Sprite sprite)
+        {
+            _selectedCharacterImage.sprite = sprite;
+        }
+
+        private void OnEnable()
+        {
+            PhotonNetwork.AddCallbackTarget(this);
+        }
+
+        private void OnDisable()
+        {
+            PhotonNetwork.RemoveCallbackTarget(this);
+        }
+
+        public void OnJoinedLobby()
+        {
+            if (SceneManager.GetActiveScene().name != "Lobby") return;
+            UI_ConfirmWindow cw = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            cw.Show("Joined Lobby!");
+        }
+
+        public void OnLeftLobby()
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show("Left lobby.");
+        }
+
+        public void OnLobbyStatisticsUpdate(List<TypedLobbyInfo> lobbyStatistics) { }
+
+        public void OnRoomListUpdate(List<RoomInfo> roomList)
+        {
+            RefreshSlots(roomList);
+        }
+
+        void RefreshSlots(List<RoomInfo> roomList)
+        {
+            RoomListSlot slotSelected = _roomListSlots.Find(slot => slot.roomId == _roomIdSelected);
+            string selectedRoomName = slotSelected?.name;
+            _joinRoom.interactable = false;
+            _roomIdSelected = -1;
+
+            for (int i = 0; i < _roomListSlots.Count; i++)
+            {
+                Destroy(_roomListSlots[i].gameObject);
+            }
+            _roomListSlots.Clear();
+            _roomInfosCached.Clear();
+
+            for (int i = 0; i < roomList.Count; i++)
+            {
+                RoomListSlot slot = Instantiate(_roomListSlot, _roomListSlotContent);
+                slot.gameObject.SetActive(true);
+                slot.roomId = i;
+                slot.roomName = roomList[i].Name;
+                slot.roomPlayerCount = roomList[i].PlayerCount;
+                slot.roomMaxPlayers = roomList[i].MaxPlayers;
+                slot.gameObject.SetActive((roomList[i].RemovedFromList == false) && (roomList[i].PlayerCount > 0));
+                _roomListSlots.Add(slot);
+                _roomInfosCached.Add(roomList[i]);
+
+                if (roomList[i].Name.Equals(selectedRoomName))
+                {
+                    _roomIdSelected = i;
+                    _joinRoom.interactable = true;
+                }
+            }
+        }
+
+        public void OnFriendListUpdate(List<FriendInfo> friendList) { }
+        public void OnCreatedRoom() { }
+        public void OnCreateRoomFailed(short returnCode, string message)
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show(message);
+        }
+
+        public void OnJoinedRoom()
+        {
+            PhotonNetwork.LocalPlayer.SetCustomProperties(new ExitGames.Client.Photon.Hashtable
+            {
+                { PlayerInRoomPropertyKey.IS_READY, false },
+            });
+
+            UI_Manager.instance.Resolve<UI_Room>().Show();
+        }
+
+        public void OnJoinRoomFailed(short returnCode, string message)
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show(message);
+        }
+
+        public void OnJoinRandomFailed(short returnCode, string message)
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show(message);
+        }
+
+        public void OnLeftRoom()
+        {
+            Show();
+        }
+    }
+}
+
+
+/*using Photon.Pun;
+using Photon.Realtime;
+using Practices.UGUI_Management.UI;
+using Practices.UGUI_Management.Utilities;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+namespace Practices.PhotonPunClient.UI
+{
+    public class UI_Lobby : UI_Screen, ILobbyCallbacks, IMatchmakingCallbacks
+    {
+        [Resolve] RectTransform _roomListSlotContent;
+        [Resolve] RoomListSlot _roomListSlot;
+        [Resolve] Button _createRoom;
+        [Resolve] Button _joinRoom;
+        List<RoomListSlot> _roomListSlots = new List<RoomListSlot>(10);
+        List<RoomInfo> _roomInfosCached = new List<RoomInfo>(10);
+        int _roomIdSelected = -1;
+
+        [Resolve] private Button _openCharacterSelectButton; //   
+        [Resolve] private Image _selectedCharacterImage; // [ADDED] 
+
+        protected override void Start()
+        {
+            base.Start();
+
+            _roomListSlot.gameObject.SetActive(false);
+            playerInputActions.UI.Click.performed += OnClick;
+            _createRoom.onClick.AddListener(() =>
+            {
+                UI_CreateRoomOption createRoomOption = UI_Manager.instance.Resolve<UI_CreateRoomOption>();
+                createRoomOption.Show();
+            });
+
+            _joinRoom.interactable = false;
+            _joinRoom.onClick.AddListener(() =>
+            {
+                UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+                RoomInfo roomInfo = _roomInfosCached[_roomIdSelected];
+
+                if (!roomInfo.IsOpen)
+                {
+                    confirmWindow.Show("The room is closed.");
+                    return;
+                }
+
+                if (roomInfo.PlayerCount >= roomInfo.MaxPlayers)
+                {
+                    confirmWindow.Show("The room is fulled.");
+                    return;
+                }
+
+                PhotonNetwork.JoinRoom(roomInfo.Name);
+            });
+
+            _openCharacterSelectButton.onClick.AddListener(() =>
+            {
+                UI_CharacterSelect popup = UI_Manager.instance.Resolve<UI_CharacterSelect>();
+                // [ADDED] ĳ   Ͱ     õǾ        ش  Sprite    κ  ǥ  
+                popup.onCharacterSelected += OnCharacterSelected;
+                popup.Show();
+            });
+        }
+
+        // [ADDED] ĳ        õ     
+        private void OnCharacterSelected(Sprite sprite)
+        {
+            // sprite    κ  UI    ̹      ǥ  
+            if (_selectedCharacterImage != null)
+                _selectedCharacterImage.sprite = sprite;
+        }
+
+        private void OnEnable()
+        {
+            PhotonNetwork.AddCallbackTarget(this);
+        }
+
+        private void OnDisable()
+        {
+            PhotonNetwork.RemoveCallbackTarget(this);
+        }
+
+        public void OnJoinedLobby()
+        {
+
+            //[ADDED]
+            if (SceneManager.GetActiveScene().name != "Lobby") return;
+            UI_ConfirmWindow cw = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            cw.Show("Joined Lobby!");
+
+            *//*UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show("Joined lobby.");*//*
+        }
+
+        public void OnLeftLobby()
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show("Left lobby.");
+        }
+
+        public void OnLobbyStatisticsUpdate(List<TypedLobbyInfo> lobbyStatistics)
+        {
+        }
+
+        public void OnRoomListUpdate(List<RoomInfo> roomList)
+        {
+            RefreshSlots(roomList);
+        }
+
+        /// <summary>
+        /// Refresh room list slots.
+        /// </summary>
+        /// <param name="roomList"></param>
+        void RefreshSlots(List<RoomInfo> roomList)
+        {
+            RoomListSlot slotSelected = _roomListSlots.Find(slot => slot.roomId == _roomIdSelected);
+            string selectedRoomName = slotSelected?.name;
+            _joinRoom.interactable = false;
+            _roomIdSelected = -1;
+
+            // TODO: Pooling slots.
+            for (int i = 0; i < _roomListSlots.Count; i++)
+            {
+                Destroy(_roomListSlots[i].gameObject);
+            }
+
+            _roomListSlots.Clear();
+            _roomInfosCached.Clear();
+
+            for (int i = 0; i < roomList.Count; i++)
+            {
+                RoomListSlot slot = Instantiate(_roomListSlot, _roomListSlotContent);
+                slot.gameObject.SetActive(true);
+                slot.roomId = i;
+                slot.roomName = roomList[i].Name;
+                slot.roomPlayerCount = roomList[i].PlayerCount;
+                slot.roomMaxPlayers = roomList[i].MaxPlayers;
+                slot.gameObject.SetActive((roomList[i].RemovedFromList == false) && (roomList[i].PlayerCount > 0));
+                _roomListSlots.Add(slot);
+                _roomInfosCached.Add(roomList[i]);
+
+                if (roomList[i].Name.Equals(selectedRoomName))
+                {
+                    _roomIdSelected = i;
+                    _joinRoom.interactable = true;
+                }
+            }
+        }
+
+        void OnClick(InputAction.CallbackContext context)
+        {
+            if (TryGraphicRaycast(Mouse.current.position.ReadValue(), out RoomListSlot slot))
+            {
+                SelectRoom(slot.roomId);
+            }
+        }
+
+        void SelectRoom(int roomId)
+        {
+            RoomInfo roomInfo = _roomInfosCached[roomId];
+
+            if (!roomInfo.IsOpen)
+            {
+                _joinRoom.interactable = false;
+                return;
+            }
+
+            if (roomInfo.PlayerCount >= roomInfo.MaxPlayers)
+            {
+                _joinRoom.interactable = false;
+                return;
+            }
+
+            _joinRoom.interactable = true;
+
+            if (_roomIdSelected >= 0)
+                _roomListSlots[_roomIdSelected].isSelected = false;
+
+            _roomListSlots[roomId].isSelected = true;
+            _roomIdSelected = roomId;
+        }
+
+        public void OnFriendListUpdate(List<FriendInfo> friendList)
+        {
+        }
+
+        public void OnCreatedRoom()
+        {
+        }
+
+        public void OnCreateRoomFailed(short returnCode, string message)
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show(message);
+        }
+
+        public void OnJoinedRoom()
+        {
+            PhotonNetwork.LocalPlayer.SetCustomProperties(new ExitGames.Client.Photon.Hashtable
+            {
+                { PlayerInRoomPropertyKey.IS_READY, false },
+            });
+
+            UI_Manager.instance.Resolve<UI_Room>()
+                               .Show();
+        }
+
+        public void OnJoinRoomFailed(short returnCode, string message)
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show(message);
+        }
+
+        public void OnJoinRandomFailed(short returnCode, string message)
+        {
+            UI_ConfirmWindow confirmWindow = UI_Manager.instance.Resolve<UI_ConfirmWindow>();
+            confirmWindow.Show(message);
+        }
+
+        public void OnLeftRoom()
+        {
+            Show();
+        }
+    }
+}*/
+
+
+// --- UI_Manager.cs ---
+using Practices.UGUI_Management.Singletons;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using Practices.UGUI_Management.Singletons;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Manager : Singleton<UI_Manager>
+    {
+        public UI_Manager()
+        {
+            _uis = new Dictionary<Type, UI_Base>(EXPECTED_MAX_UI_COUNT_IN_SCENE);
+            _popupStack = new List<UI_Popup>(EXPECTED_MAX_POPUP_COUNT_IN_SCENE);
+        }
+
+        public IEnumerable<UI_Popup> popups => _popupStack;
+
+        const int EXPECTED_MAX_UI_COUNT_IN_SCENE = 30;
+        const int EXPECTED_MAX_POPUP_COUNT_IN_SCENE = 10;
+
+        Dictionary<Type, UI_Base> _uis;
+        UI_Screen _screen;
+        List<UI_Popup> _popupStack;
+
+        // [CHANGED] 중복 등록 방지 로직
+        public void Register(UI_Base ui)
+        {
+            if (_uis.ContainsKey(ui.GetType()))
+            {
+                Debug.LogWarning($"UI {ui.GetType()} is already registered. Skipping re-register.");
+                return;
+            }
+
+            if (_uis.TryAdd(ui.GetType(), ui))
+            {
+                Debug.Log($"Registered UI {ui.GetType()}");
+
+                if (ui is UI_Popup popup)
+                {
+                    ui.onShow += () => Push(popup);
+                    ui.onHide += () => Pop(popup);
+                }
+            }
+            else
+            {
+                Debug.LogError($"Failed to register ui {ui.GetType()}. Already exist?");
+            }
+        }
+
+        // [CHANGED] 중복 등록 방지 로직
+        public void Unregister(UI_Base ui)
+        {
+            if (_uis.Remove(ui.GetType()))
+            {
+                Debug.Log($"Unregistered UI {ui.GetType()}");
+            }
+            else
+            {
+                Debug.LogError($"Failed to unregister ui {ui.GetType()}. Not exist?");
+            }
+        }
+
+        // [CHANGED] 
+        public T Resolve<T>() where T : UI_Base
+        {
+            if (_uis.TryGetValue(typeof(T), out UI_Base result))
+            {
+                // [ADDED] 파괴되었는지(=null) 체크
+                if (result == null || result.gameObject == null)
+                {
+                    _uis.Remove(typeof(T));
+                    return InstantiateUI<T>();
+                }
+
+                return (T)result;
+            }
+            else
+            {
+                return InstantiateUI<T>();
+            }
+        }
+
+        // [ADDED] UI Prefab 로드 + Instantiate를 한 곳에서 처리
+        private T InstantiateUI<T>() where T : UI_Base
+        {
+            string path = $"UI/Canvas - {typeof(T).Name.Substring(3)}";
+            // 예: T가 UI_Lobby 라면  => UI/Canvas - Lobby
+            // 실제 Resources 폴더 구조에 맞게 수정 필요
+
+            UI_Base prefab = Resources.Load<UI_Base>(path);
+            if (prefab == null)
+                throw new Exception($"Failed to resolve ui {typeof(T)}. Not exist in Resources: {path}");
+
+            T newUI = (T)GameObject.Instantiate(prefab);
+            return newUI;
+        }
+
+        public void SetScreen(UI_Screen screen)
+        {
+            if (_screen != null)
+            {
+                _screen.inputActionsEnabled = false;
+                _screen.Hide();
+            }
+
+            _screen = screen;
+            _screen.sortingOrder = 0;
+            _screen.inputActionsEnabled = true;
+        }
+
+        public void Push(UI_Popup popup)
+        {
+            int popupIndex = _popupStack.FindLastIndex(ui => ui == popup);
+            if (popupIndex >= 0)
+            {
+                _popupStack.RemoveAt(popupIndex);
+            }
+
+            int sortingOrder = 1;
+            if (_popupStack.Count > 0)
+            {
+                UI_Popup prevPopup = _popupStack[^1];
+                prevPopup.inputActionsEnabled = false;
+                sortingOrder = prevPopup.sortingOrder + 1;
+            }
+
+            popup.sortingOrder = sortingOrder;
+            popup.inputActionsEnabled = true;
+            _popupStack.Add(popup);
+            Debug.Log($"Pushed {popup.name}");
+        }
+
+        public void Pop(UI_Popup popup)
+        {
+            int popupIndex = _popupStack.FindLastIndex(ui => ui == popup);
+            if (popupIndex < 0)
+                return; //new Exception($"Failed to remove popup. {popup.name}");
+
+            if (popupIndex == _popupStack.Count - 1)
+            {
+                _popupStack[popupIndex].inputActionsEnabled = false;
+                if (popupIndex > 0)
+                    _popupStack[popupIndex - 1].inputActionsEnabled = true;
+            }
+
+            _popupStack.RemoveAt(popupIndex);
+            Debug.Log($"Popped {popup.name}");
+        }
+    }
+}
+
+
+
+
+// --- UI_MapSelect.cs ---
+// --- UI_MapSelect.cs ---
+using Photon.Pun;
+using Photon.Realtime;
+using Practices.UGUI_Management.UI;
+using System;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using ExitGames.Client.Photon; // [ADDED] for Hashtable
+using UnityEngine.SceneManagement;
+
+// [CHANGED] IInRoomCallbacks -> 맵 변경사항을 즉시 반영하기 위해
+public class UI_MapSelect : UI_Popup, IInRoomCallbacks
+{
+    [SerializeField] private TMP_Dropdown _mapDropdown;
+    [SerializeField] private Image _mapPreviewImage;
+
+    // [ADDED] 미리 정의된 맵 이름, 미리보기 Sprite
+    private List<(string mapName, Sprite mapSprite)> _maps = new List<(string, Sprite)>();
+
+    // [CHANGED] 현재 선택된 맵 이름 (Room CustomProperty "SelectedMap"와 동기화)
+    private string _selectedMap = "";
+
+    private bool _initialized = false; // [ADDED] 중복 초기화 방지 플래그
+
+    protected override void Start()
+    {
+        base.Start();
+
+        // [ADDED] 이 팝업이 뜰 때, Photon 콜백 등록
+        PhotonNetwork.AddCallbackTarget(this);
+    }
+
+    private void OnDestroy()
+    {
+        // [ADDED] 파괴 시 콜백 해제
+        PhotonNetwork.RemoveCallbackTarget(this);
+    }
+
+    public override void Show()
+    {
+        base.Show();
+
+        // [ADDED] 필요한 초기화를 한 번만 수행
+        if (!_initialized)
+        {
+            InitializeMapData();
+            InitializeDropdown();
+            _initialized = true;
+        }
+
+        // [ADDED] 방장 여부에 따라 드롭다운/Interactable 상태 조절
+        _mapDropdown.interactable = PhotonNetwork.LocalPlayer.IsMasterClient;
+
+        // [ADDED] 이미 Room에 "SelectedMap"이 있다면, 현재 선택 맵 표시
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SelectedMap", out object mapObj))
+        {
+            _selectedMap = mapObj as string;
+            SetDropdownToMap(_selectedMap);
+        }
+        else
+        {
+            // [CHANGED] 만약 없는 경우, 방장이면 기본 맵을 설정
+            if (PhotonNetwork.LocalPlayer.IsMasterClient)
+            {
+                SetDefaultMap();
+            }
+        }
+    }
+
+    // [ADDED] 맵 목록 초기화(이름 + 스프라이트)
+    private void InitializeMapData()
+    {
+        // 실제로는 Resources/Maps/ 폴더 구조에 맞춰 Sprite를 로드
+        _maps.Clear();
+        _maps.Add(("Forest", Resources.Load<Sprite>("Maps/Forest")));
+        _maps.Add(("Desert", Resources.Load<Sprite>("Maps/Desert")));
+        _maps.Add(("IceLand", Resources.Load<Sprite>("Maps/IceLand")));
+        // 필요에 따라 추가
+
+        Debug.Log($"[UI_MapSelect] Map data loaded: {_maps.Count}개");
+    }
+
+    // [ADDED] 드롭다운 설정
+    private void InitializeDropdown()
+    {
+        // 맵 이름들만 추출
+        List<string> mapNames = new List<string>();
+        foreach (var (mapName, _) in _maps)
+        {
+            mapNames.Add(mapName);
+        }
+
+        _mapDropdown.ClearOptions();
+        _mapDropdown.AddOptions(mapNames);
+
+        // 드롭다운 변경 시 -> 방장만 수정 가능
+        _mapDropdown.onValueChanged.AddListener(index =>
+        {
+            if (!PhotonNetwork.LocalPlayer.IsMasterClient)
+                return; // 방장이 아니라면 무시
+
+            _selectedMap = _maps[index].mapName;
+            _mapPreviewImage.sprite = _maps[index].mapSprite;
+
+            // [ADDED] Room CustomProperties 동기화
+            var props = new ExitGames.Client.Photon.Hashtable()
+            {
+                { "SelectedMap", _selectedMap }
+            };
+            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        });
+    }
+
+    // [ADDED] 기본 맵을 드롭다운 0번으로 (ex: Forest) 선택해두기
+    private void SetDefaultMap()
+    {
+        if (_maps.Count == 0) return;
+
+        // 첫 맵을 기본으로
+        _mapDropdown.value = 0;
+        _selectedMap = _maps[0].mapName;
+        _mapPreviewImage.sprite = _maps[0].mapSprite;
+
+        // [ADDED] Room CustomProperties에도 반영
+        var props = new ExitGames.Client.Photon.Hashtable()
+        {
+            { "SelectedMap", _selectedMap }
+        };
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+
+        Debug.Log($"[UI_MapSelect] Default map: {_selectedMap}");
+    }
+
+    // [ADDED] "SelectedMap" 문자열에 맞춰, 드롭다운/미리보기 갱신
+    private void SetDropdownToMap(string mapName)
+    {
+        int idx = _maps.FindIndex(x => x.mapName == mapName);
+        if (idx < 0) return;
+
+        _mapDropdown.value = idx;
+        _mapPreviewImage.sprite = _maps[idx].mapSprite;
+    }
+
+    // ----------------------------------
+    // IInRoomCallbacks 구현
+    // ----------------------------------
+    public void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+    {
+        // [ADDED] 방장이 변경한 "SelectedMap"을 다른 클라이언트도 반영
+        if (propertiesThatChanged.ContainsKey("SelectedMap"))
+        {
+            string newMap = (string)propertiesThatChanged["SelectedMap"];
+            Debug.Log($"[UI_MapSelect] OnRoomPropertiesUpdate => SelectedMap='{newMap}'");
+
+            // 본인 로컬 UI 갱신
+            _selectedMap = newMap;
+            SetDropdownToMap(_selectedMap);
+        }
+    }
+
+    public void OnPlayerEnteredRoom(Player newPlayer) { }
+    public void OnPlayerLeftRoom(Player otherPlayer) { }
+    public void OnMasterClientSwitched(Player newMasterClient)
+    {
+        // [ADDED] 방장이 바뀌면 드롭다운 Interactable 상태 재설정
+        _mapDropdown.interactable = PhotonNetwork.LocalPlayer.IsMasterClient;
+    }
+    public void OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps) { }
+}
+
+
+// --- UI_Popup.cs ---
+using UnityEngine.InputSystem;
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+using System.Collections.Generic;
+using Practices.UGUI_Management.Utilities;
+
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Popup : UI_Base
+    {
+        [Resolve] Image _panel;
+        private bool _onDragging;
+
+
+        protected override void Start()
+        {
+            base.Start();
+
+            playerInputActions.UI.Click.performed += CheckOtherUIClicked;
+            playerInputActions.UI.RightClick.performed += CheckOtherUIClicked;
+            playerInputActions.UI.Drag.performed += OnDrag;
+        }
+
+        void CheckOtherUIClicked(InputAction.CallbackContext context)
+        {
+            if (context.ReadValueAsButton() == false)
+                return;
+
+            Vector2 mousePosition = Mouse.current.position.ReadValue();
+
+            // 일단 이 Canvas 에서 뭔갈 클릭했는지 확인
+            if (TryGraphicRaycast(mousePosition, out CanvasRenderer renderer))
+            {
+                // Nothing todo
+            }
+            else
+            {
+                IEnumerable<UI_Popup> popups = manager.popups;
+
+                foreach (UI_Popup popup in popups)
+                {
+                    if (popup == this)
+                        continue;
+
+                    // 유저가 다른 팝업 건드림. 건드린 팝업을 최상단으로 보내줌.
+                    if (popup.TryGraphicRaycast(mousePosition, out renderer))
+                    {
+                        popup.Show();
+                        break;
+                    }
+                }
+            }
+        }
+
+        void OnDrag(InputAction.CallbackContext context)
+        {
+            if (TryGraphicRaycast(Mouse.current.position.ReadValue(), out Image result))
+            {
+                if (result == _panel)
+                {
+                    StartCoroutine(C_OnDrag(context, Mouse.current.position.ReadValue() - (Vector2)_panel.transform.position));
+                }
+            }
+        }
+
+        IEnumerator C_OnDrag(InputAction.CallbackContext context, Vector2 offset)
+        {
+            while (context.action.ReadValue<Vector2>().magnitude > 0)
+            {
+                _panel.transform.position = Mouse.current.position.ReadValue() + offset;
+                yield return null;
+            }
+        }
+    }
+}
+
+// --- UI_Room.cs ---
+// --- UI_Room.cs ---
+using TMPro;
+using UnityEngine.UI;
+using Practices.UGUI_Management.Utilities;
+using Photon.Pun;
+using Photon.Realtime;
+using ExitGames.Client.Photon;
+using System.Linq;
+using System.Collections.Generic;
+using UnityEngine;
+using Practices.UGUI_Management.UI;
+using Practices.PhotonPunClient.UI;
+using Practices.PhotonPunClient;
+
+public class UI_Room : UI_Screen, IInRoomCallbacks
+{
+    [Resolve] private RoomPlayerInfoSlot _roomPlayerInfoSlot;
+    [Resolve] private RectTransform _roomPlayerInfoPanel;
+    [Resolve] private Button _startGame;
+    [Resolve] private Button _gameReady;
+    [Resolve] private Button _leftRoom;
+
+    [Resolve] private Button _transferMasterButton;
+    [Resolve] private TMP_Dropdown _playerListDropdown;
+    [Resolve] private TMP_Text _playerCountText;
+
+    [Resolve] private Button _openMapSelectButton;
+
+    // ������ �ʵ� - [Resolve] ����
+    private Dictionary<int, (Player player, RoomPlayerInfoSlot slot)> _roomPlayerInfoPairs;
+
+    protected override void Awake()
+    {
+        base.Awake();
+        _roomPlayerInfoPairs = new Dictionary<int, (Player, RoomPlayerInfoSlot)>(16);
+    }
+
+    private void OnEnable()
+    {
+        PhotonNetwork.AddCallbackTarget(this);
+    }
+
+    private void OnDisable()
+    {
+        PhotonNetwork.RemoveCallbackTarget(this);
+    }
+
+    protected override void Start()
+    {
+        base.Start();
+
+        // [ADDED] Null üũ �α�
+        if (_startGame == null)
+            Debug.LogError("[UI_Room] _startGame is null!");
+        if (_transferMasterButton == null)
+            Debug.LogError("[UI_Room] _transferMasterButton is null!");
+        if (_gameReady == null)
+            Debug.LogError("[UI_Room] _gameReady is null!");
+        if (_openMapSelectButton == null)
+            Debug.LogError("[UI_Room] _openMapSelectButton is null!");
+
+        _roomPlayerInfoSlot.gameObject.SetActive(false);
+
+        if (_startGame != null)
+            _startGame.onClick.AddListener(OnClickStartGame);
+        else
+            Debug.LogError("[UI_Room] _startGame is not assigned.");
+
+        if (_gameReady != null)
+            _gameReady.onClick.AddListener(OnClickReady);
+        else
+            Debug.LogError("[UI_Room] _gameReady is not assigned.");
+
+        if (_leftRoom != null)
+            _leftRoom.onClick.AddListener(OnClickLeaveRoom);
+        else
+            Debug.LogError("[UI_Room] _leftRoom is not assigned.");
+
+        if (_transferMasterButton != null)
+            _transferMasterButton.onClick.AddListener(OnClickTransferMaster);
+        else
+            Debug.LogError("[UI_Room] _transferMasterButton is not assigned.");
+
+        // [ADDED] "�� ����" ��ư -> �����͸� �˾� ǥ��
+        if (_openMapSelectButton != null)
+        {
+            _openMapSelectButton.onClick.AddListener(() =>
+            {
+                if (!PhotonNetwork.LocalPlayer.IsMasterClient)
+                {
+                    Debug.LogWarning("[UI_Room] �� ������ ���常 �����մϴ�.");
+                    return;
+                }
+
+                UI_MapSelect mapSelect = UI_Manager.instance.Resolve<UI_MapSelect>();
+                mapSelect.Show();
+            });
+        }
+        else
+        {
+            Debug.LogError("[UI_Room] _openMapSelectButton is not assigned.");
+        }
+
+        TogglePlayerButtons(PhotonNetwork.LocalPlayer);
+    }
+
+    public override void Show()
+    {
+        base.Show();
+
+        // ���� UI ���� ����
+        foreach (var kvp in _roomPlayerInfoPairs)
+        {
+            Destroy(kvp.Value.slot.gameObject);
+        }
+        _roomPlayerInfoPairs.Clear();
+
+        foreach (Player player in PhotonNetwork.PlayerList)
+        {
+            CreatePlayerSlot(player);
+        }
+
+        UpdatePlayerListDropdown();
+        TogglePlayerButtons(PhotonNetwork.LocalPlayer);
+        UpdatePlayerCountUI();
+        UpdateStartGameButtonInteractable(); // �ʱ�ȭ �� interactable ���� ����
+    }
+
+    private void CreatePlayerSlot(Player player)
+    {
+        RoomPlayerInfoSlot slot = Instantiate(_roomPlayerInfoSlot, _roomPlayerInfoPanel);
+        slot.gameObject.SetActive(true);
+        slot.actorNumber = player.ActorNumber;
+        slot.isMasterClient = player.IsMasterClient;
+
+        if (player.CustomProperties.TryGetValue(PlayerInRoomPropertyKey.IS_READY, out object val))
+            slot.isReady = (bool)val;
+        else
+            slot.isReady = false;
+
+        // ĳ���� ����/�г��� ��
+        slot.playerName = player.NickName;
+        if (player.CustomProperties.TryGetValue("SelectedCharacter", out object charObj))
+        {
+            slot.SetCharacterImage((string)charObj);
+        }
+
+        _roomPlayerInfoPairs.Add(player.ActorNumber, (player, slot));
+    }
+
+    private void TogglePlayerButtons(Player localPlayer)
+    {
+        bool isMaster = localPlayer.IsMasterClient;
+        Debug.Log($"isMaster = {isMaster}");
+        _startGame.gameObject.SetActive(isMaster);
+        _transferMasterButton.gameObject.SetActive(isMaster);
+
+        // �񸶽��ʹ� Ready ��ư
+        _gameReady.gameObject.SetActive(!isMaster);
+    }
+
+    private void UpdateStartGameButtonInteractable()
+    {
+        if (_startGame != null && _startGame.gameObject.activeInHierarchy)
+        {
+            _startGame.interactable = (PhotonNetwork.CurrentRoom.PlayerCount >= 2);
+            Debug.Log($"_startGame.interactable set to {PhotonNetwork.CurrentRoom.PlayerCount >= 2}");
+        }
+        else
+        {
+            Debug.LogWarning("[UI_Room] _startGame is not active. Cannot set interactable.");
+        }
+    }
+
+    private void UpdatePlayerListDropdown()
+    {
+        _playerListDropdown.ClearOptions();
+        var names = _roomPlayerInfoPairs.Values.Select(v => v.player.NickName).ToList();
+        _playerListDropdown.AddOptions(names);
+        _playerListDropdown.value = 0;
+    }
+
+    private void UpdatePlayerCountUI()
+    {
+        _playerCountText.text = $"{PhotonNetwork.CurrentRoom.PlayerCount} / {PhotonNetwork.CurrentRoom.MaxPlayers}";
+    }
+
+    // ------------------
+    // Button Handlers
+    // ------------------
+    private void OnClickStartGame()
+    {
+        if (PhotonNetwork.LocalPlayer.IsMasterClient &&
+            PhotonNetwork.CurrentRoom.PlayerCount >= 2)
+        {
+            // [CHANGED] �׳� �ٷ� �� �ε�
+            PhotonNetwork.LoadLevel("GamePlay");
+        }
+        else
+        {
+            Debug.LogWarning("Not enough players or not master.");
+        }
+    }
+
+    private void OnClickReady()
+    {
+        var player = PhotonNetwork.LocalPlayer;
+        bool isReady = false;
+        if (player.CustomProperties.TryGetValue(PlayerInRoomPropertyKey.IS_READY, out object val))
+            isReady = (bool)val;
+
+        player.SetCustomProperties(new Hashtable
+        {
+            { PlayerInRoomPropertyKey.IS_READY, !isReady }
+        });
+    }
+
+    private void OnClickLeaveRoom()
+    {
+        PhotonNetwork.LeaveRoom();
+    }
+
+    private void OnClickTransferMaster()
+    {
+        if (!PhotonNetwork.LocalPlayer.IsMasterClient) return;
+
+        int idx = _playerListDropdown.value;
+        var players = _roomPlayerInfoPairs.Values.Select(v => v.player).ToList();
+        if (idx >= 0 && idx < players.Count)
+        {
+            Player target = players[idx];
+            PhotonNetwork.SetMasterClient(target);
+        }
+    }
+
+    // ------------------
+    // IInRoomCallbacks
+    // ------------------
+    public void OnMasterClientSwitched(Player newMasterClient)
+    {
+        // �� ���� -> false
+        var oldMaster = _roomPlayerInfoPairs.Values.FirstOrDefault(v => v.slot.isMasterClient);
+        if (oldMaster.player != null)
+            oldMaster.slot.isMasterClient = false;
+
+        // �� ���� -> true
+        if (_roomPlayerInfoPairs.TryGetValue(newMasterClient.ActorNumber, out var pair))
+            pair.slot.isMasterClient = true;
+
+        TogglePlayerButtons(PhotonNetwork.LocalPlayer);
+        UpdateStartGameButtonInteractable();
+    }
+
+    public void OnPlayerEnteredRoom(Player newPlayer)
+    {
+        CreatePlayerSlot(newPlayer);
+        UpdatePlayerListDropdown();
+        UpdatePlayerCountUI();
+        TogglePlayerButtons(PhotonNetwork.LocalPlayer);
+        UpdateStartGameButtonInteractable();
+    }
+
+    public void OnPlayerLeftRoom(Player otherPlayer)
+    {
+        if (_roomPlayerInfoPairs.TryGetValue(otherPlayer.ActorNumber, out var pair))
+        {
+            Destroy(pair.slot.gameObject);
+            _roomPlayerInfoPairs.Remove(otherPlayer.ActorNumber);
+        }
+        UpdatePlayerListDropdown();
+        UpdatePlayerCountUI();
+        TogglePlayerButtons(PhotonNetwork.LocalPlayer);
+        UpdateStartGameButtonInteractable();
+    }
+
+    public void OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
+    {
+        if (_roomPlayerInfoPairs.TryGetValue(targetPlayer.ActorNumber, out var pair))
+        {
+            if (changedProps.TryGetValue(PlayerInRoomPropertyKey.IS_READY, out object readyObj))
+                pair.slot.isReady = (bool)readyObj;
+
+            if (changedProps.TryGetValue("SelectedCharacter", out object charObj))
+                pair.slot.SetCharacterImage((string)charObj);
+        }
+
+        UpdateStartGameButtonInteractable();
+    }
+
+    public void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+    {
+        // ���⼭ "SelectedMap" ���� ���� ��, ���� ǥ�ø� ���Ѵٸ� ���� �߰� ����
+    }
+}
+
+
+// --- UI_Screen.cs ---
+namespace Practices.UGUI_Management.UI
+{
+    public class UI_Screen : UI_Base
+    {
+        public override void Show()
+        {
+            base.Show();
+
+            manager.SetScreen(this);
+        }
+    }
+}
+
+// --- ComponentExtensions.cs ---
+using UnityEngine;
+/*
+ * 확장함수 정의 방법
+ * static 클래스 내부에 첫번째 파라미터에 this 키워드가 붙은 static 함수를 정의
+ */
+namespace Practices.UGUI_Management.Utilities
+{
+    public static class ComponentExtensions
+    {
+        public static Transform FindChildReculsively(this Component component, string childName)
+        {
+            foreach (Transform child in component.transform)
+            {
+                if (child.name.Equals(childName))
+                {
+                    return child;
+                }
+                else
+                {
+                    Transform grandChild = FindChildReculsively(child, childName);
+
+                    if (grandChild)
+                        return grandChild;
+                }
+            }
+
+            return null;
+        }
+    }
+}
+
+// --- ComponentResolvingBehaviour.cs ---
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Text;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Practices.UGUI_Management.Utilities
+{
+    /// <summary>
+    /// 자동 의존성 주입을 위한 특성
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field)]
+    public class ResolveAttribute : Attribute
+    {
+
+    }
+
+    public static class ResolvePrefixTable
+    {
+        public static string GetPrefix(Type type)
+        {
+            if (s_prefixes.TryGetValue(type, out string prefix))
+                return prefix;
+
+            return string.Empty;
+        }
+
+        private static Dictionary<Type, string> s_prefixes = new Dictionary<Type, string>()
+        {
+            { typeof(Transform), "" },
+            { typeof(RectTransform), "" },
+            { typeof(GameObject), "" },
+            { typeof(TMP_Text), "Text (TMP) - " },
+            { typeof(TextMeshProUGUI), "Text (TMP) - " },
+            { typeof(TextMeshPro), "Text (TMP) - " },
+            { typeof(TMP_InputField), "InputField (TMP) - " },
+            { typeof(Image), "Image - " },
+            { typeof(Button), "Button - " }
+        };
+    }
+
+    /// <summary>
+    /// 모든 자식들을 탐색하여 의존성주입이 가능한 필드의 의존성을 알아서 해결해주는 기반클래스.
+    /// </summary>
+    public abstract class ComponentResolvingBehaviour : MonoBehaviour
+    {
+        protected virtual void Awake()
+        {
+            ResolveAll();
+        }
+
+        private void ResolveAll()
+        {
+            // Reflection: 런타임중에 "메타" 데이터에 접근하는 기능
+            // ex) GetType()/ typeof() <- "자료형" 데이터에 접근하는 기능
+            // FieldInfo <- "변수" 데이터에 접근하는 기능
+
+            // GetType() : 현재 객체의 원본 타입에 대한 데이터를 가지고있는 Type 타입의 객체참조를 반환하는함수.
+            Type type = GetType();
+            // 종속된 자식에 있는 컴포넌트참조가 public 으로 공개된다 <- 객체지향 컨셉에 맞지 않다. 그래서 NonPublic 만 허용할거다.
+            FieldInfo[] fieldInfos = type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
+            StringBuilder stringBuilder = new StringBuilder(40);
+
+            for (int i = 0; i < fieldInfos.Length; i++)
+            {
+                ResolveAttribute resolveAttribute = fieldInfos[i].GetCustomAttribute<ResolveAttribute>();
+
+                if (resolveAttribute != null)
+                {
+                    stringBuilder.Clear();
+                    string prefix = ResolvePrefixTable.GetPrefix(fieldInfos[i].FieldType);
+                    stringBuilder.Append(prefix);
+                    string fieldName = fieldInfos[i].Name;
+                    bool isFirstCharacter = true;
+
+                    // _camelCase -> PascalCase
+                    for (int j = 0; j < fieldName.Length; j++)
+                    {
+                        if (isFirstCharacter)
+                        {
+                            if (fieldName[j].Equals('_'))
+                                continue;
+
+                            stringBuilder.Append(char.ToUpper(fieldName[j]));
+                            isFirstCharacter = false;
+                        }
+                        else
+                        {
+                            stringBuilder.Append(fieldName[j]);
+                        }
+                    }
+
+                    Transform child = transform.FindChildReculsively(stringBuilder.ToString());
+
+                    if (child)
+                    {
+                        // fieldInfos[i].GetType() == typeof(Transform).GetType()
+                        // fieldInfos[i].FieldType() == typeof(Transform)
+                        Component childComponent = child.GetComponent(fieldInfos[i].FieldType);
+                        fieldInfos[i].SetValue(this, childComponent);
+                        Debug.Log($"[ResolveAll] Resolved {fieldInfos[i].Name} to GameObject '{child.name}'.");
+                    }
+                    else
+                    {
+                        Debug.LogError($"[{name}] :Cannot resolve field {fieldInfos[i].Name}");
+                        Debug.LogError($"[ResolveAll] Cannot resolve field {fieldInfos[i].Name} - GameObject with expected name not found.");
+                    }
+                }
+            }
+        }
+    }
+
+    public class A : ComponentResolvingBehaviour
+    {
+        [Resolve] Transform _content;
+    }
+}
+
+// --- FinishLineTrigger.cs ---
+// [ADDED FILE] FinishLineTrigger.cs
+// 결승점 Collider(isTrigger) 오브젝트에 부착
+using Photon.Pun;
+using Photon.Realtime;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
+public class FinishLineTrigger : MonoBehaviourPun
+{
+    // 마스터에서 도착 순서 기록
+    private List<(int actorNumber, double finishTime)> _finishList = new List<(int, double)>();
+    private bool _finishAnnounced = false;
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+
+        if (other.CompareTag("Player"))
+        {
+            PhotonView pv = other.GetComponent<PhotonView>();
+            if (pv != null)
+            {
+                int actorNumber = pv.OwnerActorNr;
+                bool alreadyFinished = _finishList.Any(x => x.actorNumber == actorNumber);
+
+                if (!alreadyFinished)
+                {
+                    double t = PhotonNetwork.Time;
+                    _finishList.Add((actorNumber, t));
+                    photonView.RPC(nameof(RpcOnPlayerFinished), RpcTarget.All, actorNumber, t);
+
+                    // 예: 모든 인원이 도착했는지 체크 (혹은 3명만 순위매긴다든지)
+                    if (_finishList.Count >= PhotonNetwork.CurrentRoom.PlayerCount)
+                    {
+                        // 전원 도착
+                       // AnnounceFinalResult();
+                    }
+                }
+            }
+        }
+    }
+
+    [PunRPC]
+    private void RpcOnPlayerFinished(int actorNumber, double finishTime)
+    {
+        Debug.Log($"Player {actorNumber} finished at time={finishTime}");
+        // 필요시 UI 표기
+    }
+
+    // 마스터 전용 결과 발표
+    void AnnounceFinalResult()
+    {
+        if (_finishAnnounced) return;
+        _finishAnnounced = true;
+
+        // 도착시간 빠른 순으로 정렬
+        var ranking = _finishList.OrderBy(x => x.finishTime).ToList();
+        // 1등 ~
+        for (int i = 0; i < ranking.Count; i++)
+        {
+            Debug.Log($"Rank {i + 1}: Actor={ranking[i].actorNumber}, time={ranking[i].finishTime}");
+        }
+
+        // TODO: PhotonNetwork.RPC로 모든 클라이언트에게 전달하거나,
+        // GamePlayManager와 연동하여 종료 처리 등
+
+        StartCoroutine(CoFinishInSeconds(5f)); // 5초 후 종료/로비
+    }
+
+    IEnumerator CoFinishInSeconds(float sec)
+    {
+        yield return new WaitForSeconds(sec);
+        PhotonNetwork.LeaveRoom();
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
+    }
+}
+
+// --- GamePlayManager.cs ---
+// --- GamePlayManager.cs ---
+using Photon.Pun;
+using Photon.Realtime;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using ExitGames.Client.Photon;
+
+public class GamePlayManager : MonoBehaviourPunCallbacks
+{
+    // [ADDED] 맵 제한시간 등 기존 로직 생략
+    [SerializeField] private float _timeLimit = 300f;
+    private float _startTime = 0f;
+    private bool _gameFinished = false;
+
+    // [ADDED] 레이스 결과 저장용 구조체
+    private Dictionary<int, PlayerResult> _playerResults = new Dictionary<int, PlayerResult>();
+
+    private struct PlayerResult
+    {
+        public string nickName;
+        public bool finished;
+        public double finishTime;
+        public int rank;
+        public bool leftEarly;
+    }
+
+    // [ADDED] 로딩된 맵 인스턴스를 참조
+    private GameObject _mapInstance;
+
+    private void Awake()
+    {
+        // 필요 시 싱글톤
+    }
+
+    void Start()
+    {
+        _startTime = Time.time;
+
+        // [ADDED] 방 참가한 모든 플레이어 Result 초기화
+        foreach (var p in PhotonNetwork.PlayerList)
+        {
+            _playerResults[p.ActorNumber] = new PlayerResult
+            {
+                nickName = p.NickName,
+                finished = false,
+                finishTime = 0.0,
+                rank = 0,
+                leftEarly = false
+            };
+        }
+
+        // [ADDED] 방에서 선택한 맵 prefab 스폰
+        LoadSelectedMap();
+
+        // [ADDED] 각 플레이어 캐릭터 스폰 (본인만 PhotonNetwork.Instantiate)
+        SpawnPlayerCharacter();
+    }
+
+    private void Update()
+    {
+        // 마스터가 제한 시간 체크
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (_gameFinished) return;
+
+        float elapsed = Time.time - _startTime;
+        float remain = _timeLimit - elapsed;
+        if (remain <= 0f)
+        {
+            Debug.Log("[GamePlayManager] Time Limit Reached => Finalize!");
+            FinalizeGameResults();
+        }
+    }
+
+    // [ADDED] Room CustomProperty "SelectedMap" 읽어서 PhotonNetwork.InstantiateRoomObject
+    private void LoadSelectedMap()
+    {
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SelectedMap", out object mapObj))
+        {
+            string selectedMap = mapObj as string;
+            if (string.IsNullOrEmpty(selectedMap))
+            {
+                selectedMap = "Forest"; // fallback
+            }
+
+            if (PhotonNetwork.IsMasterClient)
+            {
+                string mapPath = $"Maps/{selectedMap}";
+                GameObject mapPrefab = Resources.Load<GameObject>(mapPath);
+                if (mapPrefab != null)
+                {
+                    _mapInstance = PhotonNetwork.InstantiateRoomObject(mapPath, Vector3.zero, Quaternion.identity);
+                    Debug.Log($"[GamePlayManager] Instantiate Map : {selectedMap}");
+                }
+                else
+                {
+                    Debug.LogError($"Map Prefab not found in Resources: {mapPath}");
+                }
+            }
+        }
+        else
+        {
+            if (PhotonNetwork.IsMasterClient)
+            {
+                string defaultMap = "Forest";
+                GameObject mapPrefab = Resources.Load<GameObject>($"Maps/{defaultMap}");
+                if (mapPrefab != null)
+                {
+                    _mapInstance = PhotonNetwork.InstantiateRoomObject($"Maps/{defaultMap}", Vector3.zero, Quaternion.identity);
+                    Debug.Log($"[GamePlayManager] Instantiate Default Map: {defaultMap}");
+                }
+                else
+                {
+                    Debug.LogError("Default map prefab load failed!");
+                }
+            }
+        }
+    }
+
+    // [ADDED] 각 플레이어 캐릭터 Instantiate
+    private void SpawnPlayerCharacter()
+    {
+        if (PhotonNetwork.LocalPlayer.CustomProperties.TryGetValue("SelectedCharacter", out object selectedCharObj))
+        {
+            string charName = selectedCharObj as string;
+            if (string.IsNullOrEmpty(charName))
+                charName = "Warrior"; // fallback
+
+            Vector3 spawnPos = new Vector3(Random.Range(-5, 5), 0, Random.Range(-5, 5));
+            PhotonNetwork.Instantiate($"Characters/{charName}", spawnPos, Quaternion.identity);
+        }
+        else
+        {
+            // 캐릭터 선택이 없을 때
+            Vector3 spawnPos = new Vector3(Random.Range(-5, 5), 0, Random.Range(-5, 5));
+            PhotonNetwork.Instantiate("Characters/Warrior", spawnPos, Quaternion.identity);
+        }
+    }
+
+    // [ADDED] 결승선/시간만료 등에서 최종 결과
+    private void FinalizeGameResults()
+    {
+        if (_gameFinished) return;
+        _gameFinished = true;
+
+        // 등수 매기기
+        var finishedList = _playerResults.Where(k => k.Value.finished)
+                                         .OrderBy(k => k.Value.finishTime)
+                                         .ToList();
+        int rank = 1;
+        foreach (var kvp in finishedList)
+        {
+            var pr = kvp.Value;
+            pr.rank = rank++;
+            _playerResults[kvp.Key] = pr;
+        }
+
+        // 로그 출력 or UI
+        foreach (var kvp in _playerResults)
+        {
+            string msg = kvp.Value.leftEarly ? "(DNF-EarlyLeft)"
+                      : (!kvp.Value.finished ? "(DNF)" : $"Rank={kvp.Value.rank}, Time={kvp.Value.finishTime:F2}");
+            Debug.Log($"[RESULT] Actor={kvp.Key}, Nick={kvp.Value.nickName} => {msg}");
+        }
+
+        StartCoroutine(CoFinishGame());
+    }
+
+    IEnumerator CoFinishGame()
+    {
+        yield return new WaitForSeconds(3f);
+        PhotonNetwork.LeaveRoom();
+    }
+
+    // [ADDED] 중도퇴장 처리
+    public override void OnPlayerLeftRoom(Player otherPlayer)
+    {
+        base.OnPlayerLeftRoom(otherPlayer);
+        if (!_gameFinished && PhotonNetwork.IsMasterClient)
+        {
+            if (_playerResults.TryGetValue(otherPlayer.ActorNumber, out PlayerResult pr))
+            {
+                pr.leftEarly = true;
+                _playerResults[otherPlayer.ActorNumber] = pr;
+            }
+
+            // 남은 인원 <=1이면 종료
+            if (PhotonNetwork.CurrentRoom.PlayerCount <= 1)
+            {
+                FinalizeGameResults();
+            }
+        }
+    }
+
+    public override void OnLeftRoom()
+    {
+        base.OnLeftRoom();
+        SceneManager.LoadScene("Lobby");
+    }
+}
+
+
+// --- GamePlayWorkflow.cs ---
+using Photon.Pun;
+using Photon.Realtime;
+using System.Collections;
+using UnityEngine;
+
+namespace Practices.PhotonPunClient
+{
+    public class GamePlayWorkflow : MonoBehaviour
+    {
+        private WaitForSeconds _waitFor1Seconds = new WaitForSeconds(1);
+
+        private void Start()
+        {
+            StartCoroutine(C_Workflow());
+        }
+
+        private IEnumerator C_Workflow()
+        {
+            SpawnPlayerCharacter();
+            yield return StartCoroutine(C_WaitUntilAllPlayerCharactersAreSpawned());
+            Debug.Log("All characters spawned. Game ready to start.");
+        }
+
+        private void SpawnPlayerCharacter()
+        {
+            string characterName = "Archer"; // �⺻ ĳ����
+            Sprite characterSprite = Resources.Load<Sprite>("CharacterImages/Warrior"); // �⺻ ĳ���� �̹���
+
+            if (PhotonNetwork.LocalPlayer.CustomProperties.TryGetValue("SelectedCharacter", out object selectedCharacter))
+            {
+                characterName = (string)selectedCharacter;
+                characterSprite = Resources.Load<Sprite>($"CharacterImages/{characterName}");
+            }
+
+            Vector3 spawnPosition = new Vector3(Random.Range(-5, 5), 0, Random.Range(-5, 5));
+            PhotonNetwork.Instantiate($"Characters/{characterName}", spawnPosition, Quaternion.identity);
+
+            Debug.Log($"[GamePlayWorkflow] Spawned Character: {characterName}");
+        }
+
+        private IEnumerator C_WaitUntilAllPlayerCharactersAreSpawned()
+        {
+            while (true)
+            {
+                bool allSpawned = true;
+
+                foreach (Player player in PhotonNetwork.PlayerList)
+                {
+                    if (player.CustomProperties.TryGetValue("IsCharacterSpawned", out object isSpawned))
+                    {
+                        if (!(bool)isSpawned)
+                        {
+                            allSpawned = false;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        allSpawned = false;
+                        break;
+                    }
+                }
+
+                if (allSpawned) break;
+
+                yield return _waitFor1Seconds;
+            }
+        }
+    }
+}
+
+
+// --- LobbySceneWorkflow.cs ---
+using Photon.Pun;
+using Practices.PhotonPunClient.UI;
+using Practices.UGUI_Management.UI;
+using System.Collections;
+using UnityEngine;
+
+namespace Practices.GameClient.Workflows
+{
+    public class LobbySceneWorkflow : MonoBehaviour
+    {
+        private void Start()
+        {
+            StartCoroutine(C_Workflow());
+        }
+
+        IEnumerator C_Workflow()
+        {
+            //UI_Manager uiManager = UI_Manager.instance;
+
+            // Photon server 에 접속완료 될때까지 기다림.
+            yield return new WaitUntil(() => PhotonNetwork.IsConnected);
+            // 로비 UI 다시 생성 or Resolve
+            UI_Manager.instance.Resolve<UI_Lobby>().Show();
+
+            //uiManager.Resolve<UI_Lobby>()
+            //       .Show();
+        }
+    }
+}
+

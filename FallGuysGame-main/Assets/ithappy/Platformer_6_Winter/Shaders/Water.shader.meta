@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 65acc524ed632c5499dce26d2b00b8cc
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 277072
+  packageName: Platformer 6 Winter - Low Poly Asset Pack by ithappy
+  packageVersion: 1.3
+  assetPath: Assets/ithappy/Platformer_6_Winter/Shaders/Water.shader
+  uploadId: 710797

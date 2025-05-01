@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 0be170968a2504c4d8036ce169b6550c
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 227802
+  packageName: HYPEPOLY - Battle Royale Show 2
+  packageVersion: 1.0
+  assetPath: Assets/Wand and Circles/HYPEPOLY - Battle Royale Show 2/Editor/WNDPrefabVariatorEditor.cs
+  uploadId: 513533

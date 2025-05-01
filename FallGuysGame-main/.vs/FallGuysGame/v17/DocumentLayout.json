@@ -1,0 +1,189 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Data\\GitHub\\FallGuysGame\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|c:\\data\\github\\fallguysgame\\assets\\parkourmultigame\\scripts\\workflows\\finishlinetrigger.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\workflows\\finishlinetrigger.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\ui\\ui_rankpopup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\ui\\ui_rankpopup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\workflows\\gameplaymanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\workflows\\gameplaymanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\workflows\\respawnmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\workflows\\respawnmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\ui\\ui_base.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\ui\\ui_base.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\singletons\\singleton\u00601.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\singletons\\singleton\u00601.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\ui\\ui_manager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\ui\\ui_manager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\ui\\ui_room.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\ui\\ui_room.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\ui\\settingsmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\ui\\settingsmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|C:\\Data\\GitHub\\FallGuysGame\\assets\\parkourmultigame\\scripts\\ui\\ui_lobby.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A179A676-2F09-C11C-F91C-F772085F85A2}|Assembly-CSharp.csproj|solutionrelative:assets\\parkourmultigame\\scripts\\ui\\ui_lobby.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 2,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "FinishLineTrigger.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Workflows\\FinishLineTrigger.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\Workflows\\FinishLineTrigger.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Workflows\\FinishLineTrigger.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\Workflows\\FinishLineTrigger.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T18:38:58.057Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "UI_RankPopUp.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_RankPopUp.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_RankPopUp.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_RankPopUp.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_RankPopUp.cs",
+              "ViewState": "AgIAAAYAAAAAAAAAAAAswAcAAAAkAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T18:16:58.515Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "GamePlayManager.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Workflows\\GamePlayManager.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\Workflows\\GamePlayManager.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Workflows\\GamePlayManager.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\Workflows\\GamePlayManager.cs",
+              "ViewState": "AgIAAAYAAAAAAAAAAAAswL8AAAAdAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T18:12:58.879Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "UI_Base.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Base.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Base.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Base.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Base.cs",
+              "ViewState": "AgIAAEkAAAAAAAAAAAAAAHoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T17:46:27.977Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "RespawnManager.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Workflows\\RespawnManager.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\Workflows\\RespawnManager.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Workflows\\RespawnManager.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\Workflows\\RespawnManager.cs",
+              "ViewState": "AgIAAAoAAAAAAAAAAAA+wDkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T17:04:03.001Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "UI_Manager.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Manager.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Manager.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Manager.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Manager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAIkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T16:14:03.228Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Singleton\u00601.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Singletons\\Singleton\u00601.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\Singletons\\Singleton\u00601.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\Singletons\\Singleton\u00601.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\Singletons\\Singleton\u00601.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACwAAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T16:12:35.183Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "SettingsManager.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\SettingsManager.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\UI\\SettingsManager.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\SettingsManager.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\UI\\SettingsManager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAA3AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T10:52:07.051Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "UI_Lobby.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Lobby.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Lobby.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Lobby.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Lobby.cs",
+              "ViewState": "AgIAAIsAAAAAAAAAAADwvwAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T10:42:13.047Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "UI_Room.cs",
+              "DocumentMoniker": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Room.cs",
+              "RelativeDocumentMoniker": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Room.cs",
+              "ToolTip": "C:\\Data\\GitHub\\FallGuysGame\\Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Room.cs",
+              "RelativeToolTip": "Assets\\ParkourMultiGame\\Scripts\\UI\\UI_Room.cs",
+              "ViewState": "AgIAAIwAAAAAAAAAAAAAAJwAAAAXAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-06T10:41:55.099Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
