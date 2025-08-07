@@ -40,6 +40,5 @@
   
 ##  시연 영상 및 이미지
 [![프로젝트 영상](https://img.youtube.com/vi/EG7tzD8qE_M/0.jpg)](https://www.youtube.com/watch?v=EG7tzD8qE_M)  
-[YouTube 영상 보기](https://www.youtube.com/watch?v=EG7tzD8qE_M)
 
 
