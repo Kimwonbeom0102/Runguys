@@ -38,7 +38,7 @@
 - **캐릭터 리스폰 및 게임 흐름 제어**
 - **UI 및 사운드 매니저 구현**
   
-##  시연 영상 및 이미지
+##  데모
 [![프로젝트 영상](https://img.youtube.com/vi/EG7tzD8qE_M/0.jpg)](https://www.youtube.com/watch?v=EG7tzD8qE_M)  
 
 
